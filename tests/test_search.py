@@ -112,6 +112,17 @@ def test_search_weights_distinctive_terms_more_than_common_terms(tmp_path: Path)
     assert results[0].document_path.name == "specific.md"
 
 
+def test_search_matches_common_word_inflections(tmp_path: Path) -> None:
+    with LocalIndex(tmp_path / "index.sqlite3") as index:
+        index.add_documents(
+            [document("Employee requests are reviewed by managers.", "requests.md")]
+        )
+
+        results = index.search("employee request review")
+
+    assert results[0].document_path.name == "requests.md"
+
+
 def test_search_threshold_filters_low_scoring_chunks(tmp_path: Path) -> None:
     with LocalIndex(tmp_path / "index.sqlite3") as index:
         index.add_documents(

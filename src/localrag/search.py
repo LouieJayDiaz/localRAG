@@ -37,7 +37,7 @@ class SearchResult:
 
 
 class LocalIndex:
-    """Store chunks and hashed embeddings in SQLite."""
+    """Store document chunks and an FTS5 full-text index in SQLite."""
 
     def __init__(self, database_path: Path, *, dimensions: int = 256) -> None:
         if dimensions <= 0:
@@ -60,9 +60,29 @@ class LocalIndex:
             )"""
         )
         self._connection.execute(
+            """CREATE TABLE IF NOT EXISTS localrag_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )"""
+        )
+        initialized = self._connection.execute(
+            "SELECT value FROM localrag_metadata WHERE key = 'fts_version'"
+        ).fetchone()
+        fts_exists = self._connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chunks_fts'"
+        ).fetchone()
+        needs_rebuild = initialized is None or initialized[0] != "2" or fts_exists is None
+        if needs_rebuild:
+            self._connection.executescript(
+                "DROP TRIGGER IF EXISTS chunks_ai;"
+                "DROP TRIGGER IF EXISTS chunks_ad;"
+                "DROP TRIGGER IF EXISTS chunks_au;"
+                "DROP TABLE IF EXISTS chunks_fts;"
+            )
+        self._connection.execute(
             "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5("
             "content, content='chunks', content_rowid='rowid', "
-            "tokenize='unicode61 remove_diacritics 2')"
+            "tokenize='porter unicode61 remove_diacritics 2')"
         )
         self._connection.executescript(
             """
@@ -78,19 +98,13 @@ class LocalIndex:
                 VALUES ('delete', old.rowid, old.content);
                 INSERT INTO chunks_fts(rowid, content) VALUES (new.rowid, new.content);
             END;
-            CREATE TABLE IF NOT EXISTS localrag_metadata (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
             """
         )
-        initialized = self._connection.execute(
-            "SELECT value FROM localrag_metadata WHERE key = 'fts_version'"
-        ).fetchone()
-        if initialized is None:
+        if needs_rebuild:
             self._connection.execute("INSERT INTO chunks_fts(chunks_fts) VALUES ('rebuild')")
             self._connection.execute(
-                "INSERT INTO localrag_metadata(key, value) VALUES ('fts_version', '1')"
+                "INSERT INTO localrag_metadata(key, value) VALUES ('fts_version', '2') "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
             )
         self._connection.commit()
 
