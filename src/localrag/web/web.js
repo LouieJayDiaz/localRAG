@@ -12,6 +12,7 @@ function loadChats() {
 
 let chats = loadChats();
 let activeChatId = null;
+let regeneratePending = false;
 try { activeChatId = localStorage.getItem(`${CHAT_STORAGE_KEY}.active`); } catch (_) { /* storage is optional */ }
 
 function saveChats() {
@@ -92,6 +93,7 @@ function renderConversation() {
     const row = addMessage(entry.role, entry.content, entry.sources || []);
     if (entry.role === "assistant") {
       renderCitedAnswer(row.querySelector(".bubble"), row.querySelector(".sources"), entry.content, entry.sources || []);
+      addAssistantActions(row, chat.id, entry.content, entry.rating);
     }
   });
 }
@@ -119,6 +121,60 @@ function recordChatMessage(chatId, role, content, sources = []) {
   if (role === "user" && chat.title === "New chat") chat.title = content.slice(0, 48);
   saveChats();
   renderChatList();
+}
+
+function addAssistantActions(row, chatId, content, rating = null) {
+  const actions = document.createElement("div");
+  actions.className = "answer-actions";
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.textContent = "Copy";
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      message.textContent = "Answer copied.";
+    } catch (_) { message.textContent = "Clipboard access is unavailable in this browser."; }
+  });
+  const regenerate = document.createElement("button");
+  regenerate.type = "button";
+  regenerate.textContent = "Regenerate";
+  regenerate.addEventListener("click", () => {
+    const chat = chats.find((itemChat) => itemChat.id === chatId);
+    if (!chat || chat.messages.at(-1)?.role !== "assistant") return;
+    const previousUser = [...chat.messages].reverse().find((entry) => entry.role === "user");
+    if (!previousUser) return;
+    chat.messages.pop();
+    activeChatId = chatId;
+    saveChats();
+    renderChatList();
+    renderConversation();
+    $("#question").value = previousUser.content;
+    regeneratePending = true;
+    $("#chat-form").requestSubmit();
+  });
+  const feedback = document.createElement("span");
+  feedback.className = "feedback-buttons";
+  [["up", "Helpful"], ["down", "Not helpful"]].forEach(([value, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = value === "up" ? "👍" : "👎";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", String(rating === value));
+    button.addEventListener("click", () => {
+      const chat = chats.find((itemChat) => itemChat.id === chatId);
+      const entry = [...(chat?.messages || [])].reverse().find(
+        (candidate) => candidate.role === "assistant" && candidate.content === content,
+      );
+      if (!entry) return;
+      entry.rating = entry.rating === value ? null : value;
+      saveChats();
+      button.setAttribute("aria-pressed", String(entry.rating === value));
+    });
+    feedback.append(button);
+  });
+  actions.append(copy, regenerate, feedback);
+  row.append(actions);
 }
 
 function setChatControlsDisabled(disabled) {
@@ -540,12 +596,17 @@ $("#chat-form").addEventListener("submit", async (event) => {
   if (!activeChat()) createChat();
   const chat = activeChat();
   const chatId = chat.id;
-  const history = chat.messages.slice(-10).map((entry) => ({
+  const isRegenerate = regeneratePending;
+  regeneratePending = false;
+  const turnsForContext = isRegenerate ? chat.messages.slice(0, -1) : chat.messages;
+  const history = turnsForContext.slice(-10).map((entry) => ({
     role: entry.role,
     content: entry.content.slice(-2000),
   }));
-  addMessage("user", question);
-  recordChatMessage(chatId, "user", question);
+  if (!isRegenerate) {
+    addMessage("user", question);
+    recordChatMessage(chatId, "user", question);
+  }
   $("#question").value = "";
   $("#question").style.height = "auto";
   $("#send-button").disabled = true;
@@ -570,6 +631,7 @@ $("#chat-form").addEventListener("submit", async (event) => {
     const sourcesDetails = addSources(answerRow, sources);
     renderCitedAnswer(answerBubble, sourcesDetails, answer, sources);
     recordChatMessage(chatId, "assistant", answer, sources);
+    addAssistantActions(answerRow, chatId, answer);
     message.textContent = "";
   } catch (error) {
     answerRow.remove();
