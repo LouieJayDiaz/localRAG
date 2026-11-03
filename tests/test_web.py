@@ -161,6 +161,28 @@ def test_health_endpoint_reports_configuration_without_content(
     assert "documents" not in body
 
 
+def test_health_uses_configured_embedding_model(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    server = LocalRAGServer(data_directory=tmp_path, ollama=UnusedOllama())
+    monkeypatch.setenv("LOCALRAG_VECTOR_BACKEND", "chroma")
+    monkeypatch.setenv("LOCALRAG_EMBEDDING_MODEL", "custom-embed:latest")
+    monkeypatch.setattr(server, "state", lambda: {"document_count": 0})
+    monkeypatch.setattr(
+        server,
+        "scan_models",
+        lambda: {"providers": [{
+            "name": "Ollama", "id": "ollama", "available": True,
+            "models": [{"name": "custom-embed:latest"}],
+        }]},
+    )
+
+    result = server.health()
+
+    assert result["embedding_ready"] is True
+    assert result["embedding_model"] == "custom-embed:latest"
+
+
 def test_async_index_job_reports_progress_and_indexes_documents(tmp_path: Path) -> None:
     with client(tmp_path) as browser:
         response = browser.post(

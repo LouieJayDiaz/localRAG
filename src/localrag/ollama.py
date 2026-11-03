@@ -1,6 +1,7 @@
 """Small client for Ollama's local API."""
 
 import json
+import os
 import threading
 from dataclasses import dataclass
 from typing import Callable
@@ -34,8 +35,10 @@ class OllamaModel:
 class OllamaClient:
     """Talk to Ollama over HTTP."""
 
-    def __init__(self, endpoint: str = "http://127.0.0.1:11434") -> None:
-        self.endpoint = endpoint.rstrip("/")
+    def __init__(self, endpoint: str | None = None) -> None:
+        self.endpoint = (
+            endpoint or os.environ.get("LOCALRAG_OLLAMA_URL", "http://127.0.0.1:11434")
+        ).rstrip("/")
 
     def list_models(self, *, timeout_seconds: float = 2.0) -> list[OllamaModel]:
         body = self._request("GET", "/api/tags", timeout_seconds=timeout_seconds)

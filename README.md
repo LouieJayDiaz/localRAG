@@ -62,8 +62,9 @@ from your computer.
 ## Search options
 
 By default, LocalRAG uses SQLite FTS5 with BM25-ranked keyword search and a small
-English synonym map for common phrasing differences. To use ChromaDB and Ollama's
-`nomic-embed-text` model instead, install them and set the backend before starting:
+English synonym map for common phrasing differences. To use ChromaDB and Ollama
+embeddings for semantic retrieval, install the optional backend and embedding
+model before starting:
 
 ```powershell
 py -m pip install -e ".[documents,web,rag]"
@@ -72,12 +73,24 @@ $env:LOCALRAG_VECTOR_BACKEND = "chroma"
 py -m localrag.web
 ```
 
+The default embedding model is `nomic-embed-text`. You can point LocalRAG at a
+different Ollama server or compatible Ollama embedding model by setting
+`LOCALRAG_OLLAMA_URL` (base URL, default `http://127.0.0.1:11434`) and
+`LOCALRAG_EMBEDDING_MODEL` (default `nomic-embed-text`) before starting the app.
+For macOS/Linux shells use `export LOCALRAG_VECTOR_BACKEND=chroma`,
+`export LOCALRAG_OLLAMA_URL=http://127.0.0.1:11434`, and
+`export LOCALRAG_EMBEDDING_MODEL=nomic-embed-text`. Chat generation can still use
+Ollama or LM Studio; Chroma embeddings specifically use the configured Ollama
+server. The diagnostics panel reports the configured embedding model and whether
+Ollama has it installed.
+
 The SQLite and ChromaDB indexes are stored separately. If you switch between
 them, upload your files again so the selected index has them. SQLite search is
 fast local keyword search, not semantic search, so it may miss relevant passages
-when a question uses different words from the document. ChromaDB uses Ollama embeddings for semantic search;
-Ollama and `nomic-embed-text` must be available while indexing and chatting with
-the Chroma backend.
+when a question uses different words from the document. ChromaDB uses the
+configured Ollama embedding model for semantic search; Ollama and that model must
+be available while indexing and chatting with the Chroma backend. Switching
+embedding models requires re-indexing documents.
 
 The default retrieval benchmark is in `tests/test_retrieval_eval.py`. It checks
 recall@3 against a small policy and IT corpus; it is a regression check, not a

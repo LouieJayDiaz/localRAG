@@ -466,6 +466,9 @@ class LocalRAGServer:
     def health(self) -> dict[str, object]:
         """Return local configuration diagnostics without document contents."""
         backend = os.environ.get("LOCALRAG_VECTOR_BACKEND", "sqlite").casefold()
+        embedding_model = os.environ.get(
+            "LOCALRAG_EMBEDDING_MODEL", "nomic-embed-text"
+        )
         index_error = None
         try:
             document_count = self.state()["document_count"]
@@ -483,7 +486,7 @@ class LocalRAGServer:
                 ollama
                 and ollama["available"]
                 and any(
-                    model["name"].split(":", 1)[0] == "nomic-embed-text"
+                    model["name"].casefold() == embedding_model.casefold()
                     for model in ollama["models"]
                 )
             )
@@ -498,6 +501,7 @@ class LocalRAGServer:
             "index_error": index_error,
             "disk_free_bytes": free_bytes,
             "embedding_ready": embedding_ready,
+            "embedding_model": embedding_model if backend == "chroma" else None,
             "providers": providers,
         }
 

@@ -52,6 +52,24 @@ def test_embeddings_returns_normalized_numeric_vectors(
     assert result == [[1.0, 2.0], [3.0, 4.0]]
 
 
+def test_embeddings_use_configured_ollama_endpoint_and_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOCALRAG_OLLAMA_URL", "http://localhost:11435/")
+    monkeypatch.setenv("LOCALRAG_EMBEDDING_MODEL", "custom-embed:latest")
+    requests = []
+
+    def capture(request, **_kwargs):
+        requests.append(request)
+        return Response({"embeddings": [[1.0]]})
+
+    monkeypatch.setattr("localrag.embeddings.urlopen", capture)
+    NomicOllamaEmbeddings()(["hello"])
+
+    assert requests[0].full_url == "http://localhost:11435/api/embed"
+    assert json.loads(requests[0].data)["model"] == "custom-embed:latest"
+
+
 def test_embeddings_returns_empty_batch_without_network_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

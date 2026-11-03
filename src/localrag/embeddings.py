@@ -2,6 +2,7 @@
 
 import json
 import math
+import os
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -16,11 +17,14 @@ class NomicOllamaEmbeddings:
     def __init__(
         self,
         *,
-        endpoint: str = "http://127.0.0.1:11434/api/embed",
-        model: str = "nomic-embed-text",
+        endpoint: str | None = None,
+        model: str | None = None,
     ) -> None:
-        self.endpoint = endpoint
-        self.model = model
+        ollama_url = os.environ.get("LOCALRAG_OLLAMA_URL", "http://127.0.0.1:11434")
+        self.endpoint = endpoint or f"{ollama_url.rstrip('/')}/api/embed"
+        self.model = model or os.environ.get(
+            "LOCALRAG_EMBEDDING_MODEL", "nomic-embed-text"
+        )
 
     def __call__(self, input: list[str]) -> list[list[float]]:
         if not input:
@@ -48,7 +52,8 @@ class NomicOllamaEmbeddings:
             TypeError,
         ) as error:
             raise EmbeddingError(
-                "nomic-embed-text is unavailable. Install it in Ollama or use the built-in fallback."
+                f"Embedding model '{self.model}' is unavailable at {self.endpoint}. "
+                "Check LOCALRAG_OLLAMA_URL and install the model in Ollama, or use the SQLite backend."
             ) from error
         if (
             not isinstance(embeddings, list)

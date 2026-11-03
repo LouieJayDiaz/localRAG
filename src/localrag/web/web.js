@@ -697,7 +697,7 @@ $("#diagnostics-button").addEventListener("click", async () => {
     ];
     if (health.index_error) lines.push(`Index issue: ${health.index_error}`);
     if (health.embedding_ready !== null) {
-      lines.push(`Chroma embedding model ready: ${health.embedding_ready ? "yes" : "no"}`);
+      lines.push(`${health.embedding_model} embedding model ready: ${health.embedding_ready ? "yes" : "no"}`);
     }
     (health.providers || []).forEach((provider) => {
       lines.push(`${provider.name}: ${provider.available ? "available" : provider.error || "offline"}`);
