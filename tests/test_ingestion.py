@@ -22,6 +22,60 @@ def test_read_document_accepts_utf8_bom(tmp_path: Path) -> None:
     assert read_document(source).content == "BOM content"
 
 
+def test_read_html_extracts_text_and_ignores_script_content(tmp_path: Path) -> None:
+    source = tmp_path / "page.html"
+    source.write_text(
+        "<html><title>Policy</title><body><p>Annual leave</p>"
+        "<script>do not index this secret</script></body></html>",
+        encoding="utf-8",
+    )
+
+    content = read_document(source).content
+
+    assert "Annual leave" in content
+    assert "secret" not in content
+
+
+def test_read_csv_extracts_cells(tmp_path: Path) -> None:
+    source = tmp_path / "table.csv"
+    source.write_text("name,days\nAnnual leave,15\n", encoding="utf-8")
+
+    content = read_document(source).content
+
+    assert "Annual leave | 15" in content
+
+
+def test_read_xlsx_extracts_sheet_names_and_values(tmp_path: Path) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    source = tmp_path / "table.xlsx"
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Policies"
+    sheet.append(["Type", "Days"])
+    sheet.append(["Annual leave", 15])
+    workbook.save(source)
+
+    content = read_document(source).content
+
+    assert "[Policies]" in content
+    assert "Annual leave | 15" in content
+
+
+def test_read_pptx_extracts_slide_text(tmp_path: Path) -> None:
+    pptx = pytest.importorskip("pptx")
+    source = tmp_path / "deck.pptx"
+    presentation = pptx.Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    box = slide.shapes.add_textbox(0, 0, 300, 100)
+    box.text = "Annual leave policy"
+    presentation.save(source)
+
+    content = read_document(source).content
+
+    assert "[Slide 1]" in content
+    assert "Annual leave policy" in content
+
+
 @pytest.mark.parametrize("filename", ["image.png", "no_extension"])
 def test_read_document_rejects_unsupported_types(tmp_path: Path, filename: str) -> None:
     source = tmp_path / filename

@@ -14,7 +14,9 @@ from .ollama import OllamaClient, OllamaError, OllamaModel
 from .paths import default_data_directory
 from .search import LocalIndex
 
-SUPPORTED_SUFFIXES = {".docx", ".md", ".pdf", ".txt"}
+SUPPORTED_SUFFIXES = {
+    ".csv", ".docx", ".htm", ".html", ".md", ".pdf", ".pptx", ".txt", ".xlsx"
+}
 
 
 class RoundedPanel(tk.Frame):
@@ -381,7 +383,10 @@ class LocalRAGApp:
         paths = filedialog.askopenfilenames(
             title="Choose documents",
             filetypes=[
-                ("Supported documents", "*.txt *.md *.pdf *.docx"),
+                (
+                    "Supported documents",
+                    "*.txt *.md *.pdf *.docx *.html *.htm *.csv *.xlsx *.pptx",
+                ),
                 ("All files", "*.*"),
             ],
         )

@@ -23,12 +23,11 @@ from pydantic import BaseModel, Field, field_validator
 from .chat import LocalChat, ModelError
 from .chroma_index import ChromaIndex
 from .embeddings import EmbeddingError
-from .ingestion import IngestionError, read_document
+from .ingestion import IngestionError, SUPPORTED_SUFFIXES, read_document
 from .ollama import OllamaClient, OllamaError
 from .paths import default_data_directory as _default_data_directory
 from .search import LocalIndex
 
-SUPPORTED_SUFFIXES = frozenset({".docx", ".md", ".pdf", ".txt"})
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_UPLOAD_BATCH_BYTES = 100 * 1024 * 1024
 MAX_UPLOAD_FILES = 50
