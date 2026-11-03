@@ -42,14 +42,21 @@ class OllamaClient:
         models = body.get("models", [])
         if not isinstance(models, list):
             raise OllamaError("Ollama returned an invalid model list")
-        return [
-            OllamaModel(
-                name=str(item.get("name", "")),
-                size_bytes=int(item.get("size", 0) or 0),
-            )
-            for item in models
-            if isinstance(item, dict) and item.get("name")
-        ]
+        parsed: list[OllamaModel] = []
+        for item in models:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            try:
+                size_bytes = int(item.get("size", 0) or 0)
+            except (TypeError, ValueError) as error:
+                raise OllamaError("Ollama returned an invalid model size") from error
+            if size_bytes < 0:
+                raise OllamaError("Ollama returned an invalid model size")
+            parsed.append(OllamaModel(name=name, size_bytes=size_bytes))
+        return parsed
 
     def pull_model(
         self,

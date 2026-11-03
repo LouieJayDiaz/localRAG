@@ -38,6 +38,19 @@ def test_list_models_parses_registry(monkeypatch: pytest.MonkeyPatch) -> None:
     assert models[0].size_label == "1.0 KB"
 
 
+def test_list_models_ignores_malformed_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "localrag.ollama.urlopen",
+        lambda *_args, **_kwargs: Response(
+            b'{"models":[null,{"name":""},{"name":"qwen","size":42}]}'
+        ),
+    )
+
+    models = OllamaClient().list_models()
+
+    assert [(model.name, model.size_bytes) for model in models] == [("qwen", 42)]
+
+
 def test_pull_model_reports_streamed_progress(monkeypatch: pytest.MonkeyPatch) -> None:
     events: list[dict[str, object]] = []
     body = b'{"status":"downloading","completed":5,"total":10}\n{"status":"success"}\n'
