@@ -3,6 +3,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from localrag.chat import LocalChat
+from localrag.embeddings import EmbeddingError
 from localrag.web import MAX_UPLOAD_BYTES, LocalRAGServer, create_app
 
 
@@ -68,3 +70,20 @@ def test_oversized_upload_is_removed_without_indexing(tmp_path: Path) -> None:
         assert browser.get("/api/state").json()["document_count"] == 0
 
     assert list((tmp_path / "uploads").iterdir()) == []
+
+
+def test_chat_reports_embedding_provider_failure_as_gateway_error(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    def fail(*_args: Any, **_kwargs: Any) -> None:
+        raise EmbeddingError("nomic-embed-text is unavailable")
+
+    monkeypatch.setattr(LocalChat, "ask", fail)
+    with client(tmp_path) as browser:
+        response = browser.post(
+            "/api/chat",
+            json={"question": "What is in my files?", "model": "ollama:test"},
+        )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "nomic-embed-text is unavailable"

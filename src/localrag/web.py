@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from .chat import LocalChat, ModelError
 from .chroma_index import ChromaIndex
+from .embeddings import EmbeddingError
 from .ingestion import IngestionError, read_document
 from .ollama import OllamaClient, OllamaError
 from .paths import default_data_directory as _default_data_directory
@@ -81,7 +82,7 @@ class LocalRAGServer:
         try:
             with self._open_index() as index:
                 paths = index.list_documents()
-        except (OSError, ValueError) as error:
+        except (OSError, RuntimeError, ValueError) as error:
             raise HTTPException(status_code=500, detail=str(error)) from error
         return {
             "documents": [path.name for path in paths],
@@ -112,7 +113,7 @@ class LocalRAGServer:
                 documents = [read_document(path) for path in stored_paths]
                 with self._open_index() as index:
                     chunks = index.add_documents(documents)
-        except (IngestionError, OSError, ValueError) as error:
+        except (IngestionError, OSError, RuntimeError, ValueError) as error:
             for path in stored_paths:
                 path.unlink(missing_ok=True)
             raise HTTPException(status_code=400, detail=str(error)) from error
@@ -160,7 +161,7 @@ class LocalRAGServer:
                         limit=request.limit,
                         threshold=request.threshold,
                     )
-        except (ModelError, OSError, ValueError) as error:
+        except (EmbeddingError, ModelError, OSError, RuntimeError, ValueError) as error:
             raise HTTPException(status_code=502, detail=str(error)) from error
         return {
             "answer": response.answer,
@@ -314,7 +315,7 @@ class LocalRAGServer:
                         path.unlink()
                     elif path.is_dir():
                         shutil.rmtree(path)
-        except (OSError, ValueError) as error:
+        except (OSError, RuntimeError, ValueError) as error:
             raise HTTPException(status_code=500, detail=str(error)) from error
         return {"status": "cleared"}
 
