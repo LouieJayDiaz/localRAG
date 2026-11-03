@@ -7,6 +7,13 @@ files. Scanned PDF and image OCR are not supported yet.
 
 This is still a work in progress, so some parts may be rough.
 
+## What LocalRAG is for
+
+LocalRAG is designed for private, evidence-based questions about a personal
+folder of documents. It is a good fit when you want answers with visible
+citations without uploading files to a hosted AI service. It is not intended
+to be a multi-user server or a replacement for a general web search engine.
+
 ## Run it
 
 You need Python 3.11 or newer. Install [Ollama](https://ollama.com/download)
