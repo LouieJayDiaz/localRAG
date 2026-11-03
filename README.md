@@ -133,6 +133,17 @@ general language understanding score.
 If you installed LocalRAG in the active virtual environment, you can also run
 it with `localrag`.
 
+## Troubleshooting
+
+- **No model is detected:** start Ollama or load a model in LM Studio, then
+  use the refresh button in the model panel.
+- **Answers are empty or unavailable:** confirm that the selected model is
+  still loaded and that the provider is listening on its local endpoint.
+- **A PDF has no useful text:** it may be scanned or use a layout that needs
+  OCR; text extraction alone cannot read those pages.
+- **The app cannot start:** run the diagnostics panel and check that the
+  virtual environment has the `documents` and `web` extras installed.
+
 ## Run the tests
 
 ```powershell
