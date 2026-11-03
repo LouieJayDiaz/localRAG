@@ -35,6 +35,18 @@ def test_chroma_search_rejects_empty_query() -> None:
         index.search("   ")
 
 
+def test_chroma_search_reports_incomplete_result_arrays() -> None:
+    class IncompleteCollection:
+        def query(self, **_: object) -> dict[str, list[list[object]]]:
+            return {"documents": [["text"]], "metadatas": [[]], "distances": [[]]}
+
+    index = object.__new__(ChromaIndex)
+    index.collection = IncompleteCollection()
+
+    with pytest.raises(RuntimeError, match="incomplete search results"):
+        index.search("query")
+
+
 def test_chroma_reindex_keeps_old_chunks_when_upsert_fails() -> None:
     class FailingCollection:
         def get(self, **_: object) -> dict[str, list[str]]:

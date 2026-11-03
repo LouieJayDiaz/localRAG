@@ -1,5 +1,6 @@
 """Optional ChromaDB-backed vector store."""
 
+import math
 from pathlib import Path
 from typing import Iterable
 
@@ -104,16 +105,32 @@ class ChromaIndex:
         documents = result.get("documents", [[]])[0]
         metadatas = result.get("metadatas", [[]])[0]
         distances = result.get("distances", [[]])[0]
+        if not (len(documents) == len(metadatas) == len(distances)):
+            raise RuntimeError("ChromaDB returned incomplete search results")
         results: list[SearchResult] = []
         for document, metadata, distance in zip(
             documents, metadatas, distances, strict=True
         ):
-            score = 1.0 / (1.0 + float(distance))
+            if (
+                not isinstance(document, str)
+                or not isinstance(metadata, dict)
+                or not metadata.get("document_path")
+                or "chunk_index" not in metadata
+            ):
+                raise RuntimeError("ChromaDB returned invalid search metadata")
+            try:
+                distance_value = float(distance)
+                chunk_index = int(metadata["chunk_index"])
+            except (TypeError, ValueError) as error:
+                raise RuntimeError("ChromaDB returned invalid search values") from error
+            if not math.isfinite(distance_value) or distance_value < 0:
+                raise RuntimeError("ChromaDB returned invalid search distance")
+            score = 1.0 / (1.0 + distance_value)
             if score >= threshold:
                 results.append(
                     SearchResult(
                         document_path=Path(metadata["document_path"]),
-                        chunk_index=int(metadata["chunk_index"]),
+                        chunk_index=chunk_index,
                         content=document,
                         score=score,
                     )
