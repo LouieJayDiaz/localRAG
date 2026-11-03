@@ -66,6 +66,8 @@ select { max-width: 180px; padding: 9px 30px 9px 12px; border: 1px solid var(--b
 .pull-progress { flex: 1 1 100%; color: var(--muted); font-size: 11px; }
 .provider-links { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; }
 .provider-links a { color: var(--purple); font-size: 12px; }
+.diagnostics-button { margin-top: 12px; cursor: pointer; }
+.diagnostics-output { display: block; max-height: 220px; overflow: auto; color: var(--muted); font: 11px/1.6 ui-monospace, monospace; white-space: pre-wrap; }
 .download-status { margin-top: 12px !important; color: #bdb1ec !important; }
 .model-panel a { color: var(--purple); }
 .conversation { flex: 1; min-height: 360px; margin: 48px 0 18px; overflow-y: auto; }

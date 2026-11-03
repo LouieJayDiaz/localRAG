@@ -355,6 +355,32 @@ $("#clear-button").addEventListener("click", async () => {
 
 $("#refresh-models").addEventListener("click", refreshModels);
 $("#close-model-panel").addEventListener("click", () => { $("#model-panel").hidden = true; });
+$("#diagnostics-button").addEventListener("click", async () => {
+  const output = $("#diagnostics-output");
+  output.textContent = "Checking local setup...";
+  try {
+    const health = await request("/api/health");
+    const free = health.disk_free_bytes == null
+      ? "unavailable"
+      : `${(health.disk_free_bytes / (1024 ** 3)).toFixed(1)} GB`;
+    const lines = [
+      `Search backend: ${health.backend}`,
+      `Data folder: ${health.data_directory}`,
+      `Indexed documents: ${health.document_count ?? "unavailable"}`,
+      `Free disk space: ${free}`,
+    ];
+    if (health.index_error) lines.push(`Index issue: ${health.index_error}`);
+    if (health.embedding_ready !== null) {
+      lines.push(`Chroma embedding model ready: ${health.embedding_ready ? "yes" : "no"}`);
+    }
+    (health.providers || []).forEach((provider) => {
+      lines.push(`${provider.name}: ${provider.available ? "available" : provider.error || "offline"}`);
+    });
+    output.textContent = lines.join("\n");
+  } catch (error) {
+    output.textContent = error instanceof Error ? error.message : String(error);
+  }
+});
 
 $("#question").addEventListener("keydown", (event) => {
   if (event.key === "Enter") {

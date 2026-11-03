@@ -322,6 +322,44 @@ class LocalRAGServer:
             })
         return {"providers": providers}
 
+    def health(self) -> dict[str, object]:
+        """Return local configuration diagnostics without document contents."""
+        backend = os.environ.get("LOCALRAG_VECTOR_BACKEND", "sqlite").casefold()
+        index_error = None
+        try:
+            document_count = self.state()["document_count"]
+        except HTTPException as error:
+            document_count = None
+            index_error = str(error.detail)
+        providers = self.scan_models()["providers"]
+        ollama = next(
+            (provider for provider in providers if provider["id"] == "ollama"),
+            None,
+        )
+        embedding_ready = None
+        if backend == "chroma":
+            embedding_ready = bool(
+                ollama
+                and ollama["available"]
+                and any(
+                    model["name"].split(":", 1)[0] == "nomic-embed-text"
+                    for model in ollama["models"]
+                )
+            )
+        try:
+            free_bytes = shutil.disk_usage(self.data_directory).free
+        except OSError:
+            free_bytes = None
+        return {
+            "backend": backend,
+            "data_directory": str(self.data_directory),
+            "document_count": document_count,
+            "index_error": index_error,
+            "disk_free_bytes": free_bytes,
+            "embedding_ready": embedding_ready,
+            "providers": providers,
+        }
+
     def pull_model(self, request: ModelPullRequest) -> dict[str, str]:
         name = request.name.strip()
         if not name:
@@ -406,6 +444,10 @@ def create_app(server: LocalRAGServer | None = None) -> FastAPI:
     @app.get("/api/models")
     def get_models() -> dict[str, object]:
         return state.scan_models()
+
+    @app.get("/api/health")
+    def get_health() -> dict[str, object]:
+        return state.health()
 
     @app.post("/api/documents")
     def upload_documents(

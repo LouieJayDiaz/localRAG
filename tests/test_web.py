@@ -113,6 +113,29 @@ def test_stream_chat_emits_sources_tokens_and_completion(
     assert '"type":"complete"' in response.text
 
 
+def test_health_endpoint_reports_configuration_without_content(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    server = LocalRAGServer(data_directory=tmp_path, ollama=UnusedOllama())
+    monkeypatch.setattr(server, "state", lambda: {"document_count": 2})
+    monkeypatch.setattr(
+        server,
+        "scan_models",
+        lambda: {"providers": [{"name": "Ollama", "id": "ollama", "available": False, "models": []}]},
+    )
+
+    with TestClient(create_app(server)) as browser:
+        response = browser.get("/api/health")
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["backend"] == "sqlite"
+    assert body["document_count"] == 2
+    assert body["disk_free_bytes"] > 0
+    assert "data_directory" in body
+    assert "documents" not in body
+
+
 def test_oversized_upload_is_removed_without_indexing(tmp_path: Path) -> None:
     with client(tmp_path) as browser:
         response = browser.post(
