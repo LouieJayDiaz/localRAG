@@ -85,6 +85,31 @@ def test_delete_document_rejects_unknown_identifier(tmp_path: Path) -> None:
         assert browser.delete("/api/documents/missing.md").status_code == 404
 
 
+def test_stream_chat_emits_sources_tokens_and_completion(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    server = LocalRAGServer(data_directory=tmp_path, ollama=UnusedOllama())
+    with LocalIndex(server.index_path) as index:
+        index.add_documents(
+            [Document(tmp_path / "notes.md", "The answer concerns question context.")]
+        )
+    monkeypatch.setattr(
+        LocalChat, "stream_tokens", lambda *_args: iter(["First ", "second."])
+    )
+
+    with TestClient(create_app(server)) as browser:
+        response = browser.post(
+            "/api/chat/stream",
+            json={"question": "question context", "model": "ollama:test"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert '"type": "sources"' in response.text
+    assert '"type": "token", "text": "First "' in response.text
+    assert '"type":"complete"' in response.text
+
+
 def test_oversized_upload_is_removed_without_indexing(tmp_path: Path) -> None:
     with client(tmp_path) as browser:
         response = browser.post(

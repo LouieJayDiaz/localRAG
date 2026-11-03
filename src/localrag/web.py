@@ -14,6 +14,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -406,6 +407,54 @@ def create_app(server: LocalRAGServer | None = None) -> FastAPI:
     @app.post("/api/chat")
     def ask_chat(request: ChatRequest) -> dict[str, object]:
         return state.chat(request)
+
+    @app.post("/api/chat/stream")
+    def ask_chat_stream(request: ChatRequest) -> StreamingResponse:
+        provider, model = state._split_model(request.model)
+        try:
+            with state._index_lock:
+                with state._open_index() as index:
+                    if provider == "lmstudio":
+                        chat = LocalChat(
+                            index,
+                            model=model,
+                            endpoint="http://127.0.0.1:1234/v1/chat/completions",
+                            protocol="openai",
+                        )
+                    else:
+                        chat = LocalChat(index, model=model)
+                    sources = chat.retrieve(
+                        request.question,
+                        limit=request.limit,
+                        threshold=request.threshold,
+                    )
+        except (EmbeddingError, ModelError, OSError, RuntimeError, ValueError) as error:
+            raise HTTPException(status_code=502, detail=str(error)) from error
+
+        def events():
+            source_data = [
+                {
+                    "document": source.document_path.name,
+                    "chunk": source.chunk_index,
+                    "score": source.score,
+                    "content": source.content,
+                }
+                for source in sources
+            ]
+            yield f"data: {json.dumps({'type': 'sources', 'sources': source_data})}\n\n"
+            try:
+                for token in chat.stream_tokens(request.question, sources):
+                    yield f"data: {json.dumps({'type': 'token', 'text': token})}\n\n"
+            except (EmbeddingError, ModelError, OSError, RuntimeError, ValueError) as error:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(error)})}\n\n"
+                return
+            yield "data: {\"type\":\"complete\"}\n\n"
+
+        return StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.post("/api/models/pull")
     def pull_model(request: ModelPullRequest) -> dict[str, str]:

@@ -20,6 +20,42 @@ async function request(url, options = {}) {
   }
 }
 
+async function streamRequest(url, options, onEvent) {
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error("LocalRAG is not connected. Keep the server running and reload this page.");
+    }
+    throw error;
+  }
+  if (!response.ok) {
+    let detail = "Request failed.";
+    try { detail = (await response.json()).detail || detail; } catch (_) { /* keep fallback */ }
+    throw new Error(detail);
+  }
+  if (!response.body) throw new Error("This browser cannot read streamed responses.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const dispatch = (block) => {
+    const data = block.split("\n").find((line) => line.startsWith("data:"));
+    if (data) onEvent(JSON.parse(data.slice(5).trim()));
+  };
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done }).replaceAll("\r\n", "\n");
+    let boundary;
+    while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+      dispatch(buffer.slice(0, boundary));
+      buffer = buffer.slice(boundary + 2);
+    }
+    if (done) break;
+  }
+  if (buffer.trim()) dispatch(buffer);
+}
+
 async function refreshState() {
   const state = await request("/api/state");
   $("#document-count").textContent = state.document_count;
@@ -132,20 +168,25 @@ function addMessage(role, text, sources = []) {
   } else {
     bubble.textContent = text;
   }
-  if (sources.length) {
-    const details = document.createElement("details");
-    details.className = "sources";
-    details.innerHTML = `<summary>${sources.length} source${sources.length === 1 ? "" : "s"}</summary>`;
-    sources.forEach((source, index) => {
-      const sourceText = document.createElement("p");
-      sourceText.textContent = `[${index + 1}] ${source.document} - chunk ${source.chunk} - ${source.content}`;
-      details.append(sourceText);
-    });
-    row.append(details);
-  }
+  addSources(row, sources);
   conversation.append(row);
   conversation.scrollTop = conversation.scrollHeight;
   return row;
+}
+
+function addSources(row, sources) {
+  if (!sources.length) return;
+  const details = document.createElement("details");
+  details.className = "sources";
+  const summary = document.createElement("summary");
+  summary.textContent = `${sources.length} source${sources.length === 1 ? "" : "s"}`;
+  details.append(summary);
+  sources.forEach((source, index) => {
+    const sourceText = document.createElement("p");
+    sourceText.textContent = `[${index + 1}] ${source.document} - chunk ${source.chunk} - ${source.content}`;
+    details.append(sourceText);
+  });
+  row.append(details);
 }
 
 async function uploadFiles(files, input) {
@@ -176,17 +217,22 @@ $("#chat-form").addEventListener("submit", async (event) => {
   $("#question").style.height = "auto";
   $("#send-button").disabled = true;
   message.textContent = "Searching your documents and asking your local model...";
-  const thinkingRow = addMessage("assistant", null);
+  const answerRow = addMessage("assistant", "");
+  const answerBubble = answerRow.querySelector(".bubble");
+  let sources = [];
   try {
-    const result = await request("/api/chat", {
+    await streamRequest("/api/chat/stream", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question, model }),
+    }, (event) => {
+      if (event.type === "sources") sources = event.sources || [];
+      else if (event.type === "token") answerBubble.textContent += event.text;
+      else if (event.type === "error") throw new Error(event.message);
     });
-    thinkingRow.remove();
-    addMessage("assistant", result.answer, result.sources);
+    addSources(answerRow, sources);
     message.textContent = "";
   } catch (error) {
-    thinkingRow.remove();
+    if (!answerBubble.textContent) answerRow.remove();
     showError(error);
   }
   $("#send-button").disabled = false;

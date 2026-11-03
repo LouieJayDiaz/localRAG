@@ -125,3 +125,61 @@ def test_local_chat_refuses_without_retrieved_evidence(
 
     assert response.answer == NO_EVIDENCE_ANSWER
     assert response.sources == ()
+
+
+def test_local_chat_streams_ollama_tokens_incrementally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with LocalIndex(tmp_path / "index.sqlite3") as index:
+        source = Document(tmp_path / "notes.md", "Question evidence is here.")
+        index.add_documents([source])
+
+        class Response:
+            def __enter__(self) -> "Response":
+                return self
+
+            def __exit__(self, *_: object) -> None:
+                pass
+
+            def __iter__(self) -> Any:
+                return iter([
+                    b'{"response":"First ","done":false}\n',
+                    b'{"response":"second","done":true}\n',
+                ])
+
+        monkeypatch.setattr("localrag.chat.urlopen", lambda *_args, **_kwargs: Response())
+        chat = LocalChat(index, model="llama3.2")
+        sources = chat.retrieve("question evidence")
+        tokens = chat.stream_tokens("question evidence", sources)
+
+        assert next(tokens) == "First "
+        assert next(tokens) == "second"
+
+
+def test_local_chat_streams_lm_studio_sse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with LocalIndex(tmp_path / "index.sqlite3") as index:
+        index.add_documents(
+            [Document(tmp_path / "notes.md", "Question evidence is here.")]
+        )
+
+        class Response:
+            def __enter__(self) -> "Response":
+                return self
+
+            def __exit__(self, *_: object) -> None:
+                pass
+
+            def __iter__(self) -> Any:
+                return iter([
+                    b'data: {"choices":[{"delta":{"content":"LM "}}]}\n',
+                    b'data: {"choices":[{"delta":{"content":"Studio"}}]}\n',
+                    b"data: [DONE]\n",
+                ])
+
+        monkeypatch.setattr("localrag.chat.urlopen", lambda *_args, **_kwargs: Response())
+        chat = LocalChat(index, model="local-model", protocol="openai")
+        sources = chat.retrieve("question evidence")
+
+        assert list(chat.stream_tokens("question evidence", sources)) == ["LM ", "Studio"]

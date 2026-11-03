@@ -4,6 +4,7 @@ import json
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterator
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -93,16 +94,39 @@ class LocalChat:
         answer = self._generate(prompt)
         return ChatResponse(answer=answer, sources=sources)
 
+    def stream_tokens(
+        self, question: str, sources: tuple[SearchResult, ...]
+    ) -> Iterator[str]:
+        """Yield answer text as the local provider generates it."""
+        if not question.strip():
+            raise ValueError("question cannot be empty")
+        if not sources:
+            yield NO_EVIDENCE_ANSWER
+            return
+        self._stop_event.clear()
+        prompt = build_prompt(question, sources)
+        yielded = False
+        for token in self._iter_tokens(prompt):
+            yielded = True
+            yield token
+        if not yielded:
+            raise ModelError("Local model response did not contain text")
+
     def _generate(self, prompt: str) -> str:
+        answer = "".join(self._iter_tokens(prompt)).strip()
+        if not answer:
+            raise ModelError("Local model response did not contain text")
+        return answer
+
+    def _iter_tokens(self, prompt: str) -> Iterator[str]:
         if self._stop_event.is_set():
             raise ModelError("Generation stopped")
-        if self.protocol == "openai":
-            return self._generate_openai(prompt)
-        if self.protocol != "ollama":
+        if self.protocol not in {"ollama", "openai"}:
             raise ModelError(f"Unsupported local model protocol: {self.protocol}")
-        payload = json.dumps(
-            {"model": self.model, "prompt": prompt, "stream": True}
-        ).encode("utf-8")
+        if self.protocol == "openai":
+            yield from self._iter_openai_tokens(prompt)
+            return
+        payload = json.dumps({"model": self.model, "prompt": prompt, "stream": True}).encode("utf-8")
         request = Request(
             self.endpoint,
             data=payload,
@@ -113,19 +137,20 @@ class LocalChat:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 with self._response_lock:
                     self._active_response = response
-                parts: list[str] = []
                 for raw_line in response:
                     if self._stop_event.is_set():
                         raise ModelError("Generation stopped")
                     if not raw_line.strip():
                         continue
                     body = json.loads(raw_line.decode("utf-8"))
+                    if not isinstance(body, dict):
+                        raise ModelError("Local model returned invalid JSON")
                     if body.get("error"):
                         raise ModelError(str(body["error"]))
                     part = body.get("response", "")
                     if isinstance(part, str):
-                        parts.append(part)
-                answer = "".join(parts).strip()
+                        if part:
+                            yield part
         except HTTPError as error:
             raise ModelError(
                 f"Local model request failed with HTTP {error.code}: {error.reason}"
@@ -141,16 +166,18 @@ class LocalChat:
             with self._response_lock:
                 self._active_response = None
 
+    def _generate_openai(self, prompt: str) -> str:
+        answer = "".join(self._iter_openai_tokens(prompt)).strip()
         if not answer:
             raise ModelError("Local model response did not contain text")
-        return answer.strip()
+        return answer
 
-    def _generate_openai(self, prompt: str) -> str:
+    def _iter_openai_tokens(self, prompt: str) -> Iterator[str]:
         payload = json.dumps(
             {
                 "model": self.model,
                 "messages": [{"role": "user", "content": prompt}],
-                "stream": False,
+                "stream": True,
             }
         ).encode("utf-8")
         request = Request(
@@ -161,8 +188,23 @@ class LocalChat:
         )
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
-                body = json.loads(response.read().decode("utf-8"))
-            answer = body["choices"][0]["message"]["content"]
+                with self._response_lock:
+                    self._active_response = response
+                for raw_line in response:
+                    if self._stop_event.is_set():
+                        raise ModelError("Generation stopped")
+                    line = raw_line.decode("utf-8").strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    body = json.loads(data)
+                    content = body["choices"][0].get("delta", {}).get("content", "")
+                    if content:
+                        if not isinstance(content, str):
+                            raise ModelError("LM Studio returned an invalid chat response")
+                        yield content
         except HTTPError as error:
             raise ModelError(
                 f"Local model request failed with HTTP {error.code}: {error.reason}"
@@ -171,9 +213,9 @@ class LocalChat:
             raise ModelError(f"Could not connect to local model: {error}") from error
         except (KeyError, IndexError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ModelError("LM Studio returned an invalid chat response") from error
-        if not isinstance(answer, str) or not answer.strip():
-            raise ModelError("Local model response did not contain text")
-        return answer.strip()
+        finally:
+            with self._response_lock:
+                self._active_response = None
 
     def stop(self) -> None:
         """Stop the current generation."""
