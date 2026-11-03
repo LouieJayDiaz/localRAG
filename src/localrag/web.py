@@ -11,7 +11,7 @@ import shutil
 import threading
 import uuid
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -54,11 +54,25 @@ def default_data_path() -> Path:
     return default_data_directory() / "index.sqlite3"
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2_000)
+
+    @field_validator("content")
+    @classmethod
+    def content_must_contain_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("chat history entries cannot be blank")
+        return value
+
+
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
     model: str = Field(min_length=1)
     limit: int = Field(default=5, ge=1, le=20)
     threshold: float = Field(default=0.0, ge=0.0, le=1.0)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=20)
 
     @field_validator("question")
     @classmethod
@@ -233,8 +247,13 @@ class LocalRAGServer:
                         request.question,
                         limit=request.limit,
                         threshold=request.threshold,
+                        history=[(turn.role, turn.content) for turn in request.history],
                     )
-            response = chat.answer_with_sources(request.question, sources)
+            response = chat.answer_with_sources(
+                request.question,
+                sources,
+                history=[(turn.role, turn.content) for turn in request.history],
+            )
         except (EmbeddingError, ModelError, OSError, RuntimeError, ValueError) as error:
             raise HTTPException(status_code=502, detail=str(error)) from error
         return {
@@ -482,6 +501,7 @@ def create_app(server: LocalRAGServer | None = None) -> FastAPI:
                         request.question,
                         limit=request.limit,
                         threshold=request.threshold,
+                        history=[(turn.role, turn.content) for turn in request.history],
                     )
         except (EmbeddingError, ModelError, OSError, RuntimeError, ValueError) as error:
             raise HTTPException(status_code=502, detail=str(error)) from error
@@ -498,7 +518,11 @@ def create_app(server: LocalRAGServer | None = None) -> FastAPI:
             ]
             yield f"data: {json.dumps({'type': 'sources', 'sources': source_data})}\n\n"
             try:
-                for token in chat.stream_tokens(request.question, sources):
+                for token in chat.stream_tokens(
+                    request.question,
+                    sources,
+                    history=[(turn.role, turn.content) for turn in request.history],
+                ):
                     yield f"data: {json.dumps({'type': 'token', 'text': token})}\n\n"
             except (EmbeddingError, ModelError, OSError, RuntimeError, ValueError) as error:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(error)})}\n\n"

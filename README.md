@@ -20,7 +20,14 @@ py -m localrag.web
 
 Open http://127.0.0.1:8000, add some files, and scan for models. LocalRAG shows
 models it finds in Ollama or LM Studio. It doesn't download or pick a model for
-you. Install or load one in its app, then scan again.
+you. The model panel can download Ollama models, show progress, and cancel a
+download. LM Studio models still need to be loaded in LM Studio before scanning.
+
+The web app streams answers and stores conversations in the browser's local
+storage. You can create, rename, delete, and export conversations. Chat history
+is local to the browser profile and is not encrypted; clearing the document index
+does not clear chat history. Follow-up questions use recent turns for context,
+while retrieved document passages remain the evidence for factual answers.
 
 When you chat, LocalRAG sends the question and matching passages from your
 files to the model you chose. With Ollama or LM Studio running on your computer,

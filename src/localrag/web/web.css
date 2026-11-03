@@ -25,6 +25,16 @@ button { cursor: pointer; }
 .secondary-upload { margin-top: 8px; }
 .upload-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .file-help { color: #6f6f7a; font-size: 11px; margin: 8px 8px 28px; }
+.chat-section { max-height: 34vh; overflow: auto; margin-bottom: 18px; }
+.chat-heading { align-items: center; }
+.chat-heading button { border: 1px solid var(--border); border-radius: 6px; padding: 4px 7px; background: var(--panel); color: var(--text); font-size: 10px; letter-spacing: 0; }
+.chat-list { list-style: none; margin: 0; padding: 0; }
+.chat-list li { display: flex; align-items: center; gap: 3px; padding: 3px 4px; }
+.chat-select { flex: 1; min-width: 0; overflow: hidden; border: 0; border-radius: 6px; padding: 7px 5px; background: transparent; color: #c4c3ce; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.chat-select[aria-current="true"] { background: #29233c; color: var(--text); }
+.chat-action { border: 0; border-radius: 5px; padding: 4px 6px; background: transparent; color: #8e8d99; font-size: 11px; }
+.chat-action:hover { background: #29233c; color: var(--text); }
+.export-button { padding: 6px 8px; font-size: 11px; }
 .sidebar-section { flex: 1; min-height: 100px; }
 .section-heading { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .12em; padding: 0 8px 12px; }
 .count { color: var(--purple); }

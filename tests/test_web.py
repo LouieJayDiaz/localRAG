@@ -97,7 +97,9 @@ def test_stream_chat_emits_sources_tokens_and_completion(
             [Document(tmp_path / "notes.md", "The answer concerns question context.")]
         )
     monkeypatch.setattr(
-        LocalChat, "stream_tokens", lambda *_args: iter(["First ", "second."])
+        LocalChat,
+        "stream_tokens",
+        lambda *_args, **_kwargs: iter(["First ", "second."]),
     )
 
     with TestClient(create_app(server)) as browser:
@@ -238,6 +240,20 @@ def test_chat_rejects_blank_question_as_validation_error(tmp_path: Path) -> None
     with client(tmp_path) as browser:
         response = browser.post(
             "/api/chat", json={"question": "   ", "model": "ollama:test"}
+        )
+
+    assert response.status_code == 422
+
+
+def test_chat_limits_follow_up_history(tmp_path: Path) -> None:
+    with client(tmp_path) as browser:
+        response = browser.post(
+            "/api/chat",
+            json={
+                "question": "Question",
+                "model": "ollama:test",
+                "history": [{"role": "user", "content": "earlier"}] * 21,
+            },
         )
 
     assert response.status_code == 422

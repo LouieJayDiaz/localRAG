@@ -29,6 +29,18 @@ def test_build_prompt_numbers_sources() -> None:
     assert "<document_passages>" in prompt
 
 
+def test_build_prompt_uses_history_only_for_follow_up_context() -> None:
+    prompt = build_prompt(
+        "What about those?",
+        (),
+        history=(("user", "Tell me about the policy."), ("assistant", "It allows leave.")),
+    )
+
+    assert "USER: Tell me about the policy." in prompt
+    assert "ASSISTANT: It allows leave." in prompt
+    assert "only to interpret follow-up references" in prompt
+
+
 def test_local_chat_sends_grounded_prompt_and_returns_sources(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -183,3 +195,20 @@ def test_local_chat_streams_lm_studio_sse(
         sources = chat.retrieve("question evidence")
 
         assert list(chat.stream_tokens("question evidence", sources)) == ["LM ", "Studio"]
+
+
+def test_local_chat_uses_history_to_retrieve_follow_up_context(
+    tmp_path: Path,
+) -> None:
+    with LocalIndex(tmp_path / "index.sqlite3") as index:
+        index.add_documents(
+            [Document(tmp_path / "leave.md", "Annual leave allowance is fifteen days.")]
+        )
+        chat = LocalChat(index, model="llama3.2")
+
+        sources = chat.retrieve(
+            "How many is that?",
+            history=(("user", "What is the annual leave allowance?"),),
+        )
+
+    assert sources[0].document_path.name == "leave.md"

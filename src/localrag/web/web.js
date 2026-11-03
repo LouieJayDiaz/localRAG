@@ -1,6 +1,130 @@
 const $ = (selector) => document.querySelector(selector);
 const conversation = $("#conversation");
 const message = $("#message");
+const CHAT_STORAGE_KEY = "localrag.chats.v1";
+
+function loadChats() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CHAT_STORAGE_KEY) || "[]");
+    return Array.isArray(stored) ? stored.filter((chat) => chat && typeof chat.id === "string" && Array.isArray(chat.messages)) : [];
+  } catch (_) { return []; }
+}
+
+let chats = loadChats();
+let activeChatId = null;
+try { activeChatId = localStorage.getItem(`${CHAT_STORAGE_KEY}.active`); } catch (_) { /* storage is optional */ }
+
+function saveChats() {
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chats));
+    if (activeChatId) localStorage.setItem(`${CHAT_STORAGE_KEY}.active`, activeChatId);
+    else localStorage.removeItem(`${CHAT_STORAGE_KEY}.active`);
+  } catch (_) {
+    message.textContent = "Could not save chat history in this browser's local storage.";
+  }
+}
+
+function activeChat() {
+  return chats.find((chat) => chat.id === activeChatId) || null;
+}
+
+function renderChatList() {
+  const list = $("#chat-list");
+  list.replaceChildren();
+  chats.forEach((chat) => {
+    const item = document.createElement("li");
+    const select = document.createElement("button");
+    select.type = "button";
+    select.className = "chat-select";
+    select.textContent = chat.title || "New chat";
+    select.title = chat.title || "New chat";
+    select.setAttribute("aria-current", String(chat.id === activeChatId));
+    select.addEventListener("click", () => selectChat(chat.id));
+    const rename = document.createElement("button");
+    rename.type = "button";
+    rename.className = "chat-action";
+    rename.textContent = "Rename";
+    rename.setAttribute("aria-label", `Rename ${chat.title || "chat"}`);
+    rename.addEventListener("click", () => {
+      const title = prompt("Conversation name", chat.title || "New chat");
+      if (title?.trim()) {
+        chat.title = title.trim().slice(0, 80);
+        saveChats();
+        renderChatList();
+      }
+    });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "chat-action";
+    remove.textContent = "×";
+    remove.setAttribute("aria-label", `Delete ${chat.title || "chat"}`);
+    remove.addEventListener("click", () => {
+      if (!confirm(`Delete conversation “${chat.title || "New chat"}”?`)) return;
+      chats = chats.filter((itemChat) => itemChat.id !== chat.id);
+      if (activeChatId === chat.id) activeChatId = chats[0]?.id || null;
+      if (!activeChatId) createChat();
+      else { saveChats(); renderChatList(); renderConversation(); }
+    });
+    item.append(select, rename, remove);
+    list.append(item);
+  });
+  $("#export-chat").disabled = !(activeChat()?.messages.length);
+}
+
+function renderConversation() {
+  conversation.replaceChildren();
+  const chat = activeChat();
+  if (!chat || !chat.messages.length) {
+    const welcome = document.createElement("div");
+    welcome.className = "welcome";
+    const mark = document.createElement("div");
+    mark.className = "welcome-mark";
+    mark.textContent = "✦";
+    const title = document.createElement("h2");
+    title.textContent = "What can I help you find?";
+    const help = document.createElement("p");
+    help.textContent = "Add some documents, then ask a question about them.";
+    welcome.append(mark, title, help);
+    conversation.append(welcome);
+    return;
+  }
+  chat.messages.forEach((entry) => {
+    const row = addMessage(entry.role, entry.content, entry.sources || []);
+    if (entry.role === "assistant") {
+      renderCitedAnswer(row.querySelector(".bubble"), row.querySelector(".sources"), entry.content, entry.sources || []);
+    }
+  });
+}
+
+function createChat() {
+  const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  chats.unshift({ id, title: "New chat", messages: [] });
+  activeChatId = id;
+  saveChats();
+  renderChatList();
+  renderConversation();
+}
+
+function selectChat(id) {
+  activeChatId = id;
+  saveChats();
+  renderChatList();
+  renderConversation();
+}
+
+function recordChatMessage(chatId, role, content, sources = []) {
+  const chat = chats.find((itemChat) => itemChat.id === chatId);
+  if (!chat) return;
+  chat.messages.push({ role, content, sources });
+  if (role === "user" && chat.title === "New chat") chat.title = content.slice(0, 48);
+  saveChats();
+  renderChatList();
+}
+
+function setChatControlsDisabled(disabled) {
+  $("#new-chat").disabled = disabled;
+  $("#chat-list").querySelectorAll("button").forEach((button) => { button.disabled = disabled; });
+}
 
 function showError(error) {
   message.textContent = error instanceof Error ? error.message : String(error);
@@ -231,7 +355,7 @@ async function showProviderPanel() {
 }
 
 function addMessage(role, text, sources = []) {
-  $("#welcome")?.remove();
+  conversation.querySelector(".welcome")?.remove();
   const row = document.createElement("div");
   row.className = `message-row ${role}`;
   row.innerHTML = `<div class="message-label">${role === "user" ? "YOU" : "LOCALRAG"}</div><div class="bubble"></div>`;
@@ -305,6 +429,18 @@ async function uploadFiles(files, input) {
 
 $("#file-input").addEventListener("change", (event) => uploadFiles(event.target.files, event.target));
 $("#folder-input").addEventListener("change", (event) => uploadFiles(event.target.files, event.target));
+$("#new-chat").addEventListener("click", createChat);
+$("#export-chat").addEventListener("click", () => {
+  const chat = activeChat();
+  if (!chat) return;
+  const blob = new Blob([JSON.stringify(chat, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${(chat.title || "localrag-chat").replace(/[^a-z0-9-_]+/gi, "-")}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+});
 
 $("#chat-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -312,10 +448,19 @@ $("#chat-form").addEventListener("submit", async (event) => {
   if (!question) return;
   const model = $("#model-select").value.trim();
   if (!model) { showError("Scan for a model and select one first."); return; }
+  if (!activeChat()) createChat();
+  const chat = activeChat();
+  const chatId = chat.id;
+  const history = chat.messages.slice(-10).map((entry) => ({
+    role: entry.role,
+    content: entry.content.slice(-2000),
+  }));
   addMessage("user", question);
+  recordChatMessage(chatId, "user", question);
   $("#question").value = "";
   $("#question").style.height = "auto";
   $("#send-button").disabled = true;
+  setChatControlsDisabled(true);
   message.textContent = "Searching your documents and asking your local model...";
   const answerRow = addMessage("assistant", "");
   const answerBubble = answerRow.querySelector(".bubble");
@@ -324,7 +469,7 @@ $("#chat-form").addEventListener("submit", async (event) => {
   try {
     await streamRequest("/api/chat/stream", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, model }),
+      body: JSON.stringify({ question, model, history }),
     }, (event) => {
       if (event.type === "sources") sources = event.sources || [];
       else if (event.type === "token") {
@@ -335,12 +480,14 @@ $("#chat-form").addEventListener("submit", async (event) => {
     });
     const sourcesDetails = addSources(answerRow, sources);
     renderCitedAnswer(answerBubble, sourcesDetails, answer, sources);
+    recordChatMessage(chatId, "assistant", answer, sources);
     message.textContent = "";
   } catch (error) {
     answerRow.remove();
     showError(error);
   }
   $("#send-button").disabled = false;
+  setChatControlsDisabled(false);
 });
 
 
@@ -396,5 +543,11 @@ $("#question").addEventListener("input", (event) => {
   event.target.style.height = `${Math.min(event.target.scrollHeight, 130)}px`;
 });
 
-
+if (!activeChat()) activeChatId = chats[0]?.id || null;
+if (!chats.length) createChat();
+else {
+  saveChats();
+  renderChatList();
+  renderConversation();
+}
 Promise.all([refreshState(), refreshModels()]).catch(showError);
