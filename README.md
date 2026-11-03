@@ -1,86 +1,65 @@
 # LocalRAG
 
-I built LocalRAG because I wanted to ask questions about my own files. It runs
-as a website on your computer and uses Ollama or LM Studio to answer questions.
-It can read the following formats:
+LocalRAG is a thing i made so i can ask questions about my own files without
+uploading them to some random website. it runs on your computer and talks to
+Ollama or LM Studio.
 
-| Format | Notes |
+it is still being worked on. it is not some huge perfect company app lol.
+
+## what it can read
+
+| file | what happens |
 | --- | --- |
-| TXT, Markdown | UTF-8 text |
-| PDF | Text-based PDFs; page references are preserved |
-| DOCX | Paragraphs and tables |
-| HTML | Visible page text |
-| CSV, XLSX | Cell values and rows |
-| PPTX | Slide text |
-| PNG, JPEG, GIF, BMP, TIFF, WebP | Image dimensions and local OCR text |
+| TXT, Markdown | reads the text |
+| PDF | reads text PDFs and keeps page labels |
+| DOCX | reads paragraphs and tables |
+| HTML | gets the visible text |
+| CSV, XLSX | reads rows and cells |
+| PPTX | reads slide text and tables |
+| PNG, JPEG, GIF, BMP, TIFF, WebP | gets image info and OCR text |
 
-Image OCR uses the optional `images` extra (`Pillow` and `pytesseract`).
-LocalRAG automatically finds common Windows Tesseract installations and also
-accepts `LOCALRAG_TESSERACT_PATH`, so a PATH change is usually unnecessary.
-If the extra or executable is missing, LocalRAG reports that requirement
-instead of silently indexing an empty image.
+for image OCR, install the `images` extra. it uses Pillow and pytesseract.
+LocalRAG tries to find Tesseract on Windows by itself, which is nice. if it
+still cannot find it, set `LOCALRAG_TESSERACT_PATH` to the path of
+`tesseract.exe`.
 
-This is still a work in progress, so some parts may be rough.
+## quick start
 
-## What LocalRAG is for
+### Windows
 
-LocalRAG is designed for private, evidence-based questions about a personal
-folder of documents. It is a good fit when you want answers with visible
-citations without uploading files to a hosted AI service. It is not intended
-to be a multi-user server or a replacement for a general web search engine.
-
-## Run it
-
-You need Python 3.11 or newer. Install [Ollama](https://ollama.com/download)
-or [LM Studio](https://lmstudio.ai/) if you want to chat with a model.
-After cloning the repository, the launcher creates a virtual environment,
-installs LocalRAG's document, image, and web dependencies, and starts the app.
-
-### Windows (PowerShell)
+open PowerShell in this folder and run:
 
 ```powershell
 .\start_localrag.ps1
 ```
 
-### macOS and Linux
+### macOS or Linux
 
 ```sh
 bash start_localrag.sh
 ```
 
-To run it manually instead, use the commands below.
+those scripts make a `.venv`, install the stuff, and start the app. so you
+dont have to remember every command.
 
-#### Windows (PowerShell)
+you need Python 3.11 or newer. for actually chatting, you also need
+[Ollama](https://ollama.com/download) or
+[LM Studio](https://lmstudio.ai/). LocalRAG does not magically download a
+chat model for you.
 
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-py -m pip install -e ".[documents,images,web]"
-py -m localrag.web
-```
+## desktop app mode
 
-#### macOS and Linux
-
-```sh
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[documents,images,web]'
-python -m localrag.web
-```
-
-### Optional native desktop window
-
-The desktop launcher starts the same local FastAPI app in a native
-pywebview window. If pywebview or its platform backend is unavailable, it
-opens the local URL in your default browser instead:
+you can run it in a normal app-looking window instead of a browser:
 
 ```powershell
 py -m pip install -e ".[documents,images,web,desktop]"
 py run_desktop.py
 ```
 
-For a distributable Windows folder or macOS app bundle, install the build
-extra and use the target platform's build script:
+it uses pywebview if it works. if not, it opens your normal browser. still
+local either way.
+
+you can also make a Windows build or a macOS app:
 
 ```powershell
 .\scripts\build_desktop.ps1
@@ -90,63 +69,47 @@ extra and use the target platform's build script:
 ./scripts/build_desktop.sh
 ```
 
-See [`packaging/README.md`](packaging/README.md) for the onedir build details.
-The packaged app does not include model files, Ollama, LM Studio, or the
-external Tesseract OCR executable.
+the build needs to happen on the same kind of computer you want to run it on.
+PyInstaller does not cross-build. the output does not include Ollama, LM
+Studio, or giant AI models.
 
-Open http://127.0.0.1:8000, add some files, and scan for models. LocalRAG shows
-models it finds in Ollama or LM Studio. It doesn't download or pick a model for
-you. The model panel can download Ollama models, show progress, and cancel a
-download. LM Studio models still need to be loaded in LM Studio before scanning.
+## running it manually
 
-The web app indexes uploads in a background job with file progress and
-cancellation. It streams answers and stores conversations in the browser's local
-storage. You can create, rename, delete, and export conversations. Chat history
-is local to the browser profile and is not encrypted; clearing the document index
-does not clear chat history. Follow-up questions use recent turns for context,
-while retrieved document passages remain the evidence for factual answers.
+if the scripts are being weird, these are the longer commands.
 
-When you chat, LocalRAG sends the question and matching passages from your
-files to the model you chose. With Ollama or LM Studio running on your computer,
-that stays on your computer. The server starts on `127.0.0.1`, so other devices
-can't reach it by default. The API has no authentication. Keep it bound to
-`127.0.0.1`; binding to `0.0.0.0` can expose document uploads, chats, model
-downloads, and index deletion to other devices on your network. The server
-refuses non-loopback hosts unless you pass `--allow-network`; that flag does not
-add authentication. Network or multi-user use is not supported.
-
-LocalRAG saves its index and uploaded copies in the platform's application-data
-directory (`%LOCALAPPDATA%\LocalRAG` on Windows, `~/Library/Application
-Support/LocalRAG` on macOS, or `$XDG_DATA_HOME/LocalRAG` / `~/.local/share/LocalRAG`
-on Linux). Uploads can be up to 25 MB per file and 100 MB / 50 files per batch.
-Extracted text is limited to 5 million characters per document. **Clear index**
-removes the index and those uploaded copies. It doesn't remove the original files
-from your computer.
-
-### Privacy model
-
-LocalRAG does not include telemetry or a hosted inference service. The server
-talks to the local provider selected in the app, and uploaded copies remain in
-the application-data directory until you clear or remove them. Browser chat
-history is separate from the document index and is stored in that browser's
-local storage. Treat the computer account and its storage as the security
-boundary.
-
-## Search options
-
-By default, LocalRAG uses SQLite FTS5 with BM25-ranked keyword search and a small
-English synonym map for common phrasing differences. To use ChromaDB and Ollama
-embeddings for semantic retrieval, install the optional backend and embedding
-model before starting:
+### Windows
 
 ```powershell
-py -m pip install -e ".[documents,images,web,rag]"
-ollama pull nomic-embed-text
-py -m localrag.web --vector-backend hybrid
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+py -m pip install -e ".[documents,images,web]"
+py -m localrag.web
 ```
 
-For semantic search without an Ollama embedding server, install the optional
-ONNX-based local embedding backend:
+### macOS or Linux
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[documents,images,web]'
+python -m localrag.web
+```
+
+then open http://127.0.0.1:8000.
+
+## models
+
+LocalRAG can see models from Ollama and LM Studio. start one of them, load a
+model, then press refresh in the app.
+
+the model panel can download Ollama models and show download progress. LM
+Studio models need to already be loaded in LM Studio.
+
+### semantic search without Ollama embeddings
+
+the normal search uses SQLite keyword search, and honestly that is the easiest
+option. if you want semantic search without running an Ollama embedding model,
+you can use the optional local ONNX backend:
 
 ```powershell
 py -m pip install -e ".[documents,images,web,local-embeddings]"
@@ -155,62 +118,70 @@ $env:LOCALRAG_EMBEDDING_PROVIDER = "fastembed"
 py -m localrag.web
 ```
 
-The small embedding model downloads once on first use and then runs locally.
-Chat generation still requires Ollama or LM Studio. Switching between
-embedding providers requires re-uploading files (or clearing and rebuilding
-the index) so all vectors use the same model.
+the embedding model downloads the first time and then runs on your computer.
+chat still needs Ollama or LM Studio. changing embedding providers means you
+should re-upload your files so the vectors are made with the same model.
 
-The default embedding model is `nomic-embed-text`. You can point LocalRAG at a
-different Ollama server or compatible Ollama embedding model by setting
-`LOCALRAG_OLLAMA_URL` (base URL, default `http://127.0.0.1:11434`) and
-`LOCALRAG_EMBEDDING_MODEL` (default `nomic-embed-text`) before starting the app.
-You can also select hybrid mode with `--vector-backend hybrid`, or set
-`LOCALRAG_VECTOR_BACKEND=chroma`. For macOS/Linux shells use `export LOCALRAG_VECTOR_BACKEND=chroma`,
-`export LOCALRAG_OLLAMA_URL=http://127.0.0.1:11434`, and
-`export LOCALRAG_EMBEDDING_MODEL=nomic-embed-text`. Chat generation can still use
-Ollama or LM Studio; Chroma embeddings specifically use the configured Ollama
-server. The diagnostics panel reports the configured embedding model and whether
-the selected embedding provider is ready.
+## privacy stuff
 
-The Chroma option combines semantic results with SQLite's BM25 keyword results
-using reciprocal-rank fusion. SQLite remains the source of truth, so documents
-already indexed there remain searchable when you enable Chroma; re-upload them
-to add semantic vectors. If Ollama or the embedding model is unavailable, the
-hybrid backend falls back to SQLite search instead of failing the upload or
-returning stale vectors. Switching embedding models requires re-uploading files
-to rebuild their vectors. The default SQLite backend remains keyword search and
-may miss passages when a question uses different words from the document.
+LocalRAG does not have telemetry or a hosted AI service. your files stay on
+your computer and the server starts on `127.0.0.1`.
 
-The default retrieval benchmark is in `tests/test_retrieval_eval.py`. It checks
-recall@3 against a small policy and IT corpus; it is a regression check, not a
-general language understanding score.
+the API has no login. do not bind it to `0.0.0.0` unless you really know what
+you are doing, because that can let other devices on your network upload files,
+chat, download models, or delete the index. network and multi-user use is not
+supported.
 
-Run that focused check with:
+chat history is saved in your browser's local storage. it is not encrypted.
+clearing the document index does not clear the chat history.
+
+LocalRAG keeps its data here:
+
+- Windows: `%LOCALAPPDATA%\LocalRAG`
+- macOS: `~/Library/Application Support/LocalRAG`
+- Linux: `$XDG_DATA_HOME/LocalRAG` or `~/.local/share/LocalRAG`
+
+uploads can be 25 MB each, with a 100 MB / 50 file batch limit. extracted text
+has a 5 million character limit per document.
+
+## search details
+
+the default search is SQLite FTS5 with BM25 ranking and a small synonym list.
+the optional Chroma mode combines keyword and semantic results.
+
+the retrieval test is here:
 
 ```powershell
 py -m pytest tests/test_retrieval_eval.py
 ```
 
-If you installed LocalRAG in the active virtual environment, you can also run
-it with `localrag`.
+it checks recall on a small test collection. it is not claiming LocalRAG is
+an all-knowing genius.
 
-## Troubleshooting
+## troubleshooting
 
-- **No model is detected:** start Ollama or load a model in LM Studio, then
-  use the refresh button in the model panel.
-- **Answers are empty or unavailable:** confirm that the selected model is
-  still loaded and that the provider is listening on its local endpoint.
-- **A PDF has no useful text:** it may be scanned or use a layout that needs
-  OCR; image OCR currently applies to uploaded image files, not PDF pages.
-- **Image OCR is unavailable:** install LocalRAG with `.[images]` and install
-  Tesseract OCR. LocalRAG finds common Windows installs; otherwise set
-  `LOCALRAG_TESSERACT_PATH` to the executable.
-- **The app cannot start:** run the diagnostics panel and check that the
-  virtual environment has the `documents` and `web` extras installed.
+- **no model shows up:** start Ollama or load a model in LM Studio, then press
+  refresh.
+- **answers are empty:** check that the model is still loaded and the provider
+  is running.
+- **PDF has no useful text:** it might be scanned. OCR currently works for
+  uploaded image files, not PDF pages.
+- **image OCR does not work:** install `.[images]` and Tesseract. LocalRAG
+  finds common Windows installs, or use `LOCALRAG_TESSERACT_PATH`.
+- **the app will not start:** make sure the `documents` and `web` extras are
+  installed.
 
-## Run the tests
+## tests
 
 ```powershell
 py -m pip install -e ".[documents,images,test,web]"
 py -m pytest
 ```
+
+there are currently tests for ingestion, searching, chat, the web API, image
+OCR handling, and the desktop launcher.
+
+## license / status
+
+this is a work in progress project. things might break. if you find a bug,
+feel free to open an issue with what you did and what happened.
