@@ -1,6 +1,7 @@
 """Chat with a local Ollama model using indexed files."""
 
 import json
+import os
 import re
 import threading
 from dataclasses import dataclass
@@ -39,7 +40,7 @@ class LocalChat:
         index: LocalIndex,
         *,
         model: str,
-        endpoint: str = "http://127.0.0.1:11434/api/generate",
+        endpoint: str | None = None,
         protocol: str = "ollama",
         timeout_seconds: float = 120.0,
     ) -> None:
@@ -49,7 +50,8 @@ class LocalChat:
             raise ValueError("timeout_seconds must be greater than zero")
         self.index = index
         self.model = model
-        self.endpoint = endpoint
+        ollama_url = os.environ.get("LOCALRAG_OLLAMA_URL", "http://127.0.0.1:11434")
+        self.endpoint = endpoint or f"{ollama_url.rstrip('/')}/api/generate"
         self.protocol = protocol
         self.timeout_seconds = timeout_seconds
         self._stop_event = threading.Event()

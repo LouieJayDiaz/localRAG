@@ -44,6 +44,7 @@ def test_build_prompt_uses_history_only_for_follow_up_context() -> None:
 def test_local_chat_sends_grounded_prompt_and_returns_sources(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setenv("LOCALRAG_OLLAMA_URL", "http://localhost:11435/")
     with LocalIndex(tmp_path / "index.sqlite3") as index:
         index.add_documents(
             [Document(tmp_path / "notes.md", "The answer is stored locally.")],
@@ -63,6 +64,7 @@ def test_local_chat_sends_grounded_prompt_and_returns_sources(
 
         def fake_urlopen(request: Any, timeout: float) -> Response:
             captured["payload"] = json.loads(request.data)
+            captured["url"] = request.full_url
             captured["timeout"] = timeout
             return Response()
 
@@ -73,6 +75,8 @@ def test_local_chat_sends_grounded_prompt_and_returns_sources(
     assert response.sources[0].document_path.name == "notes.md"
     assert captured["payload"]["model"] == "llama3.2"
     assert captured["payload"]["stream"] is True
+    assert captured["url"] == "http://localhost:11435/api/generate"
+    assert captured["timeout"] == 120.0
     assert "[1]" in captured["payload"]["prompt"]
 
 
