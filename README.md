@@ -40,7 +40,7 @@ from your computer.
 
 ## Search options
 
-By default, LocalRAG uses a basic SQLite search. To use ChromaDB and Ollama's
+By default, LocalRAG uses SQLite FTS5 with BM25-ranked keyword search. To use ChromaDB and Ollama's
 `nomic-embed-text` model instead, install them and set the backend before
 starting the app:
 
@@ -52,10 +52,9 @@ py -m localrag.web
 ```
 
 The SQLite and ChromaDB indexes are stored separately. If you switch between
-them, upload your files again so the selected index has them. SQLite search uses
-token overlap and a small hashed word vector. It is a lightweight fallback, not
-semantic search, so it may miss relevant passages when a question uses different
-words from the document. ChromaDB uses Ollama embeddings for semantic search;
+them, upload your files again so the selected index has them. SQLite search is
+fast local keyword search, not semantic search, so it may miss relevant passages
+when a question uses different words from the document. ChromaDB uses Ollama embeddings for semantic search;
 Ollama and `nomic-embed-text` must be available while indexing and chatting with
 the Chroma backend.
 
