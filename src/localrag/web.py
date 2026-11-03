@@ -71,7 +71,7 @@ class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
     model: str = Field(min_length=1)
     limit: int = Field(default=5, ge=1, le=20)
-    threshold: float = Field(default=0.0, ge=0.0, le=1.0)
+    threshold: float = Field(default=0.15, ge=0.0, le=1.0)
     history: list[ChatTurn] = Field(default_factory=list, max_length=20)
 
     @field_validator("question")

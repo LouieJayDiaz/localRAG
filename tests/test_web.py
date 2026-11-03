@@ -270,6 +270,18 @@ def test_chat_reports_embedding_provider_failure_as_gateway_error(
     assert response.json()["detail"] == "nomic-embed-text is unavailable"
 
 
+def test_chat_abstains_when_query_has_no_matching_evidence(tmp_path: Path) -> None:
+    with client(tmp_path) as browser:
+        response = browser.post(
+            "/api/chat",
+            json={"question": "What is the weather on Mars?", "model": "ollama:unused"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["sources"] == []
+    assert response.json()["answer"].startswith("I couldn't find relevant passages")
+
+
 def test_chat_releases_index_lock_before_model_generation(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

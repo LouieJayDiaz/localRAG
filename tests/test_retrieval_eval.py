@@ -33,3 +33,19 @@ def test_default_search_recall_at_three(tmp_path: Path) -> None:
         )
 
     assert hits / len(cases) >= 0.8
+
+
+def test_default_search_ignores_question_filler_for_unrelated_queries(
+    tmp_path: Path,
+) -> None:
+    with LocalIndex(tmp_path / "index.sqlite3") as index:
+        index.add_documents(
+            [
+                Document(tmp_path / "leave.md", "Annual leave policy and paid vacation days."),
+                Document(tmp_path / "security.md", "Reset a forgotten password from account settings."),
+            ]
+        )
+
+        assert index.search("what is the weather on Mars") == []
+        assert index.search("where is the employee handbook") == []
+        assert index.search("what is the vacation policy")
