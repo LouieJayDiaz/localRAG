@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -496,7 +497,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run the LocalRAG website")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument(
+        "--allow-network",
+        action="store_true",
+        help="allow access from other devices (the API has no authentication)",
+    )
     arguments = parser.parse_args()
+    try:
+        loopback = ipaddress.ip_address(arguments.host).is_loopback
+    except ValueError:
+        loopback = arguments.host.casefold() == "localhost"
+    if not loopback and not arguments.allow_network:
+        parser.error("binding beyond localhost requires the explicit --allow-network flag")
 
     import uvicorn
 

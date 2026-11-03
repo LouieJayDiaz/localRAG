@@ -27,8 +27,9 @@ files to the model you chose. With Ollama or LM Studio running on your computer,
 that stays on your computer. The server starts on `127.0.0.1`, so other devices
 can't reach it by default. The API has no authentication. Keep it bound to
 `127.0.0.1`; binding to `0.0.0.0` can expose document uploads, chats, model
-downloads, and index deletion to other devices on your network. Network or
-multi-user use is not supported.
+downloads, and index deletion to other devices on your network. The server
+refuses non-loopback hosts unless you pass `--allow-network`; that flag does not
+add authentication. Network or multi-user use is not supported.
 
 LocalRAG saves its index and uploaded copies in the platform's application-data
 directory (`%LOCALAPPDATA%\LocalRAG` on Windows, `~/Library/Application
