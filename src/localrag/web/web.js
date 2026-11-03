@@ -450,6 +450,8 @@ function addSources(row, sources) {
   details.append(summary);
   sources.forEach((source, index) => {
     const sourceText = document.createElement("p");
+    sourceText.id = `source-reference-${index + 1}`;
+    sourceText.tabIndex = -1;
     const matchScore = Math.round((Number(source.score) || 0) * 100);
     sourceText.textContent = `[${index + 1}] ${source.document} - chunk ${source.chunk} - match score ${matchScore}%\n${source.content}`;
     details.append(sourceText);
@@ -477,7 +479,11 @@ function renderCitedAnswer(bubble, sourcesDetails, answer, sources) {
           link.addEventListener("click", () => {
             if (!sourcesDetails) return;
             sourcesDetails.open = true;
-            sourcesDetails.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            const source = sourcesDetails.querySelector(`#source-reference-${sourceIndex + 1}`);
+            requestAnimationFrame(() => {
+              source?.scrollIntoView({ behavior: "smooth", block: "center" });
+              source?.focus({ preventScroll: true });
+            });
           });
           parent.append(link);
         } else parent.append(document.createTextNode(token));
