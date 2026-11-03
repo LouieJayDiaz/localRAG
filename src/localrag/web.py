@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import ipaddress
 import json
 import os
@@ -23,7 +24,7 @@ from pydantic import BaseModel, Field, field_validator
 from .chat import LocalChat, ModelError
 from .chroma_index import ChromaIndex
 from .embeddings import EmbeddingError
-from .ingestion import IngestionError, SUPPORTED_SUFFIXES, read_document
+from .ingestion import Document, IngestionError, SUPPORTED_SUFFIXES, read_document
 from .ollama import OllamaClient, OllamaError
 from .paths import default_data_directory as _default_data_directory
 from .search import LocalIndex
@@ -133,7 +134,7 @@ class LocalRAGServer:
     def index_uploads(self, uploads: list[UploadFile]) -> dict[str, object]:
         if not uploads:
             raise HTTPException(status_code=400, detail="Choose at least one document.")
-        stored_paths: list[Path] = []
+        staged: list[tuple[Path, Path]] = []
         try:
             if len(uploads) > MAX_UPLOAD_FILES:
                 raise HTTPException(
@@ -148,38 +149,56 @@ class LocalRAGServer:
                     detail=f"The selected files exceed the {batch_limit_mb} MB batch limit.",
                 )
             with self._index_lock:
-                used_destinations: set[Path] = set()
-                for upload in uploads:
-                    filename = Path(upload.filename or "").name
-                    suffix = Path(filename).suffix.lower()
-                    if not filename or suffix not in SUPPORTED_SUFFIXES:
-                        supported = ", ".join(sorted(SUPPORTED_SUFFIXES))
-                        raise IngestionError(
-                            f"Unsupported document type: {filename or '(none)'}; use {supported}"
-                        )
-                    stem = Path(filename).stem
-                    destination = self.upload_directory / f"{stem}--{uuid.uuid4().hex[:12]}{suffix}"
-                    stored_paths.append(destination)
-                    used_destinations.add(destination)
-                    self._copy_upload(upload, destination, filename)
-
-                documents = [read_document(path) for path in stored_paths]
+                staged = self._stage_uploads(uploads)
+                documents = [
+                    Document(destination.resolve(), read_document(temporary).content)
+                    for temporary, destination in staged
+                ]
                 with self._open_index() as index:
                     chunks = index.add_documents(documents)
+                for temporary, destination in staged:
+                    temporary.replace(destination)
         except HTTPException:
             raise
         except (EmbeddingError, RuntimeError) as error:
-            for path in stored_paths:
-                path.unlink(missing_ok=True)
+            for temporary, _ in staged:
+                temporary.unlink(missing_ok=True)
             raise HTTPException(status_code=503, detail=str(error)) from error
         except (IngestionError, OSError, ValueError) as error:
-            for path in stored_paths:
-                path.unlink(missing_ok=True)
+            for temporary, _ in staged:
+                temporary.unlink(missing_ok=True)
             raise HTTPException(status_code=400, detail=str(error)) from error
         finally:
             for upload in uploads:
                 upload.file.close()
-        return {"documents_added": len(stored_paths), "chunks_added": chunks}
+        return {"documents_added": len(staged), "chunks_added": chunks}
+
+    def _stage_uploads(self, uploads: list[UploadFile]) -> list[tuple[Path, Path]]:
+        staged: list[tuple[Path, Path]] = []
+        seen: dict[str, int] = {}
+        try:
+            for upload in uploads:
+                source_key = (upload.filename or "").replace("\\", "/").strip("/")
+                filename = Path(source_key).name
+                suffix = Path(filename).suffix.lower()
+                if not filename or suffix not in SUPPORTED_SUFFIXES:
+                    supported = ", ".join(sorted(SUPPORTED_SUFFIXES))
+                    raise IngestionError(
+                        f"Unsupported document type: {filename or '(none)'}; use {supported}"
+                    )
+                occurrence = seen.get(source_key.casefold(), 0)
+                seen[source_key.casefold()] = occurrence + 1
+                identity = source_key if occurrence == 0 else f"{source_key}#copy-{occurrence}"
+                digest = hashlib.sha256(identity.casefold().encode("utf-8")).hexdigest()[:12]
+                destination = self.upload_directory / f"{Path(filename).stem}--{digest}{suffix}"
+                temporary = self.upload_directory / f".upload-{uuid.uuid4().hex}{suffix}"
+                staged.append((temporary, destination))
+                self._copy_upload(upload, temporary, filename)
+            return staged
+        except Exception:
+            for temporary, _ in staged:
+                temporary.unlink(missing_ok=True)
+            raise
 
     @staticmethod
     def _copy_upload(upload: UploadFile, destination: Path, filename: str) -> None:
@@ -205,33 +224,21 @@ class LocalRAGServer:
         """Stage uploaded files and index them asynchronously with progress."""
         if not uploads:
             raise HTTPException(status_code=400, detail="Choose at least one document.")
-        stored_paths: list[Path] = []
+        staged: list[tuple[Path, Path]] = []
         try:
             if len(uploads) > MAX_UPLOAD_FILES:
                 raise HTTPException(status_code=413, detail=f"Choose no more than {MAX_UPLOAD_FILES} files at a time.")
             known_batch_size = sum(upload.size or 0 for upload in uploads)
             if known_batch_size > MAX_UPLOAD_BATCH_BYTES:
                 raise HTTPException(status_code=413, detail="The selected files exceed the 100 MB batch limit.")
-            for upload in uploads:
-                filename = Path(upload.filename or "").name
-                suffix = Path(filename).suffix.lower()
-                if not filename or suffix not in SUPPORTED_SUFFIXES:
-                    supported = ", ".join(sorted(SUPPORTED_SUFFIXES))
-                    raise IngestionError(
-                        f"Unsupported document type: {filename or '(none)'}; use {supported}"
-                    )
-                destination = self.upload_directory / (
-                    f"{Path(filename).stem}--{uuid.uuid4().hex[:12]}{suffix}"
-                )
-                stored_paths.append(destination)
-                self._copy_upload(upload, destination, filename)
+            staged = self._stage_uploads(uploads)
         except HTTPException:
-            for path in stored_paths:
-                path.unlink(missing_ok=True)
+            for temporary, _ in staged:
+                temporary.unlink(missing_ok=True)
             raise
         except (IngestionError, OSError, ValueError) as error:
-            for path in stored_paths:
-                path.unlink(missing_ok=True)
+            for temporary, _ in staged:
+                temporary.unlink(missing_ok=True)
             raise HTTPException(status_code=400, detail=str(error)) from error
         finally:
             for upload in uploads:
@@ -244,7 +251,7 @@ class LocalRAGServer:
                 "job_id": job_id,
                 "status": "queued",
                 "completed": 0,
-                "total": len(stored_paths),
+                "total": len(staged),
                 "message": "Waiting to index documents...",
             }
             self._index_events[job_id] = cancel_event
@@ -253,14 +260,14 @@ class LocalRAGServer:
             self._set_index_job(job_id, status="reading", message="Reading documents...")
             try:
                 documents = []
-                for position, path in enumerate(stored_paths, start=1):
+                for position, (temporary, destination) in enumerate(staged, start=1):
                     if cancel_event.is_set():
                         raise InterruptedError("Indexing cancelled.")
-                    documents.append(read_document(path))
+                    documents.append(Document(destination.resolve(), read_document(temporary).content))
                     self._set_index_job(
                         job_id,
                         completed=position,
-                        message=f"Read {position} of {len(stored_paths)} documents...",
+                        message=f"Read {position} of {len(staged)} documents...",
                     )
                 if cancel_event.is_set():
                     raise InterruptedError("Indexing cancelled.")
@@ -268,25 +275,27 @@ class LocalRAGServer:
                 with self._index_lock:
                     with self._open_index() as index:
                         chunks = index.add_documents(documents)
+                for temporary, destination in staged:
+                    temporary.replace(destination)
                 self._set_index_job(
                     job_id,
                     status="complete",
                     message=f"Indexed {len(documents)} documents ({chunks} chunks).",
                     documents_added=len(documents),
                     chunks_added=chunks,
-                    completed=len(stored_paths),
+                    completed=len(staged),
                 )
             except InterruptedError:
-                for path in stored_paths:
-                    path.unlink(missing_ok=True)
+                for temporary, _ in staged:
+                    temporary.unlink(missing_ok=True)
                 self._set_index_job(job_id, status="cancelled", message="Indexing cancelled.")
             except (EmbeddingError, IngestionError, OSError, RuntimeError, ValueError) as error:
-                for path in stored_paths:
-                    path.unlink(missing_ok=True)
+                for temporary, _ in staged:
+                    temporary.unlink(missing_ok=True)
                 self._set_index_job(job_id, status="error", message=str(error))
 
         threading.Thread(target=process, name=f"localrag-index-{job_id}", daemon=True).start()
-        return {"job_id": job_id, "status": "queued", "total": len(stored_paths)}
+        return {"job_id": job_id, "status": "queued", "total": len(staged)}
 
     def index_job_status(self, job_id: str) -> dict[str, object]:
         with self._index_jobs_lock:

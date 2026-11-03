@@ -563,7 +563,7 @@ async function uploadFiles(files, input) {
 
   if (!files.length) return;
   const form = new FormData();
-  [...files].forEach((file) => form.append("uploads", file, file.name));
+  [...files].forEach((file) => form.append("uploads", file, file.webkitRelativePath || file.name));
   message.textContent = "Reading and indexing documents...";
   $("#cancel-index").hidden = false;
   try {

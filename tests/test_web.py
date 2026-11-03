@@ -51,6 +51,28 @@ def test_uploads_with_same_name_are_kept_separately(tmp_path: Path) -> None:
     assert display_names == ["notes.md", "notes.md"]
 
 
+def test_reuploading_same_source_replaces_indexed_content(tmp_path: Path) -> None:
+    with client(tmp_path) as browser:
+        first = browser.post(
+            "/api/documents",
+            files={"uploads": ("folder/notes.md", b"oldalpha unique phrase", "text/markdown")},
+        )
+        assert first.status_code == 200
+        second = browser.post(
+            "/api/documents",
+            files={"uploads": ("folder/notes.md", b"newbravo unique phrase", "text/markdown")},
+        )
+
+        assert second.status_code == 200
+        assert browser.get("/api/state").json()["document_count"] == 1
+
+    with LocalIndex(tmp_path / "index.sqlite3") as index:
+        assert not index.search("oldalpha", limit=5)
+        results = index.search("newbravo", limit=5)
+    assert len(results) == 1
+    assert "newbravo" in results[0].content
+
+
 def test_clear_removes_indexed_upload_copies(tmp_path: Path) -> None:
     with client(tmp_path) as browser:
         assert browser.post(
