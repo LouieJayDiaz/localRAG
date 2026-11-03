@@ -30,7 +30,7 @@
       <button id="clear-button" class="quiet-button" type="button">&times; Clear index</button>
       <div class="sidebar-footer">
         <span class="status-dot"></span>
-        <span id="connection-status">Checking local providers...</span>
+        <span id="connection-status" aria-live="polite">Checking local providers...</span>
       </div>
     </aside>
     <main class="main">
@@ -59,7 +59,7 @@
         </div>
         <p id="scan-status" class="download-status"></p>
       </section>
-      <section id="conversation" class="conversation">
+      <section id="conversation" class="conversation" role="log" aria-label="Chat conversation" aria-live="polite" aria-relevant="additions">
         <div id="welcome" class="welcome">
           <div class="welcome-mark">&#10022;</div>
           <h2>What can I help you find?</h2>
