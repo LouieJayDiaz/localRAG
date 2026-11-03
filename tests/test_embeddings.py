@@ -50,3 +50,19 @@ def test_embeddings_returns_normalized_numeric_vectors(
     result = NomicOllamaEmbeddings()(["one", "two"])
 
     assert result == [[1.0, 2.0], [3.0, 4.0]]
+
+
+def test_embeddings_returns_empty_batch_without_network_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "localrag.embeddings.urlopen",
+        lambda *_args, **_kwargs: pytest.fail("empty batches must not call Ollama"),
+    )
+
+    assert NomicOllamaEmbeddings()([]) == []
+
+
+def test_embeddings_reject_blank_input() -> None:
+    with pytest.raises(EmbeddingError, match="non-empty text"):
+        NomicOllamaEmbeddings()([" "])

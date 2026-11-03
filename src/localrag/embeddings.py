@@ -23,6 +23,10 @@ class NomicOllamaEmbeddings:
         self.model = model
 
     def __call__(self, input: list[str]) -> list[list[float]]:
+        if not input:
+            return []
+        if not all(isinstance(text, str) and text.strip() for text in input):
+            raise EmbeddingError("Embedding inputs must be non-empty text.")
         payload = json.dumps({"model": self.model, "input": input}).encode("utf-8")
         request = Request(
             self.endpoint,
