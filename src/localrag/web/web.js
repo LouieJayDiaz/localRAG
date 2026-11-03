@@ -249,11 +249,13 @@ function renderProviders(providers) {
     card.className = "provider-card";
     const heading = document.createElement("div");
     heading.className = "provider-heading";
-    heading.innerHTML = "<strong></strong><span></span>";
-    heading.querySelector("strong").textContent = provider.name;
-    heading.querySelector("span").textContent = provider.available
+    const providerName = document.createElement("strong");
+    providerName.textContent = provider.name;
+    const providerStatus = document.createElement("span");
+    providerStatus.textContent = provider.available
       ? `${(provider.models || []).length} detected`
       : "Not running";
+    heading.append(providerName, providerStatus);
     card.append(heading);
     const detail = document.createElement("p");
     detail.textContent = provider.available
@@ -345,7 +347,9 @@ function addOllamaPullControls(card) {
 async function showProviderPanel() {
   $("#model-panel").hidden = false;
   $("#scan-status").textContent = "Scanning local model providers...";
-  $("#provider-list").innerHTML = "<p>Checking local providers...</p>";
+  const checking = document.createElement("p");
+  checking.textContent = "Checking local providers...";
+  $("#provider-list").replaceChildren(checking);
   try {
     await refreshModels();
     $("#scan-status").textContent = "Scan complete. Refresh after installing a model.";
@@ -358,11 +362,19 @@ function addMessage(role, text, sources = []) {
   conversation.querySelector(".welcome")?.remove();
   const row = document.createElement("div");
   row.className = `message-row ${role}`;
-  row.innerHTML = `<div class="message-label">${role === "user" ? "YOU" : "LOCALRAG"}</div><div class="bubble"></div>`;
-  const bubble = row.querySelector(".bubble");
+  const label = document.createElement("div");
+  label.className = "message-label";
+  label.textContent = role === "user" ? "YOU" : "LOCALRAG";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  row.append(label, bubble);
   if (text === null) {
     bubble.classList.add("thinking");
-    bubble.innerHTML = '<span>.</span><span>.</span><span>.</span>';
+    for (let index = 0; index < 3; index += 1) {
+      const dot = document.createElement("span");
+      dot.textContent = ".";
+      bubble.append(dot);
+    }
   } else {
     bubble.textContent = text;
   }
@@ -391,26 +403,103 @@ function addSources(row, sources) {
 
 function renderCitedAnswer(bubble, sourcesDetails, answer, sources) {
   bubble.replaceChildren();
-  const citation = /\[(\d+)\]/g;
-  let cursor = 0;
-  for (const match of answer.matchAll(citation)) {
-    const sourceIndex = Number(match[1]) - 1;
-    if (sourceIndex < 0 || sourceIndex >= sources.length) continue;
-    bubble.append(document.createTextNode(answer.slice(cursor, match.index)));
-    const link = document.createElement("button");
-    link.type = "button";
-    link.className = "citation-link";
-    link.textContent = match[0];
-    link.setAttribute("aria-label", `Show source ${match[1]}`);
-    link.addEventListener("click", () => {
-      if (!sourcesDetails) return;
-      sourcesDetails.open = true;
-      sourcesDetails.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    });
-    bubble.append(link);
-    cursor = match.index + match[0].length;
+  const appendInline = (parent, text) => {
+    const tokenPattern = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\n]+\*|\[(\d+)\])/g;
+    let cursor = 0;
+    for (const match of text.matchAll(tokenPattern)) {
+      parent.append(document.createTextNode(text.slice(cursor, match.index)));
+      const token = match[0];
+      if (match[2]) {
+        const sourceIndex = Number(match[2]) - 1;
+        if (sourceIndex >= 0 && sourceIndex < sources.length) {
+          const link = document.createElement("button");
+          link.type = "button";
+          link.className = "citation-link";
+          link.textContent = token;
+          link.setAttribute("aria-label", `Show source ${match[2]}`);
+          link.addEventListener("click", () => {
+            if (!sourcesDetails) return;
+            sourcesDetails.open = true;
+            sourcesDetails.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          });
+          parent.append(link);
+        } else parent.append(document.createTextNode(token));
+      } else if (token.startsWith("`")) {
+        const code = document.createElement("code");
+        code.textContent = token.slice(1, -1);
+        parent.append(code);
+      } else {
+        const emphasis = document.createElement(token.startsWith("**") ? "strong" : "em");
+        emphasis.textContent = token.startsWith("**") ? token.slice(2, -2) : token.slice(1, -1);
+        parent.append(emphasis);
+      }
+      cursor = match.index + token.length;
+    }
+    parent.append(document.createTextNode(text.slice(cursor)));
+  };
+
+  let paragraph = [];
+  let list = null;
+  let codeLines = null;
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    const block = document.createElement("p");
+    appendInline(block, paragraph.join(" "));
+    bubble.append(block);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (list) bubble.append(list);
+    list = null;
+  };
+  const flushCode = () => {
+    if (!codeLines) return;
+    const pre = document.createElement("pre");
+    const code = document.createElement("code");
+    code.textContent = codeLines.join("\n");
+    pre.append(code);
+    bubble.append(pre);
+    codeLines = null;
+  };
+
+  for (const line of answer.split("\n")) {
+    if (line.trim().startsWith("```")) {
+      flushParagraph();
+      flushList();
+      if (codeLines) flushCode();
+      else codeLines = [];
+      continue;
+    }
+    if (codeLines) { codeLines.push(line); continue; }
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const title = document.createElement(`h${heading[1].length + 2}`);
+      appendInline(title, heading[2]);
+      bubble.append(title);
+      continue;
+    }
+    const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+    if (bullet) {
+      flushParagraph();
+      if (!list) list = document.createElement("ul");
+      const item = document.createElement("li");
+      appendInline(item, bullet[1]);
+      list.append(item);
+      continue;
+    }
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+    } else {
+      flushList();
+      paragraph.push(line);
+    }
   }
-  bubble.append(document.createTextNode(answer.slice(cursor)));
+  flushCode();
+  flushParagraph();
+  flushList();
 }
 
 async function uploadFiles(files, input) {
@@ -496,7 +585,8 @@ $("#clear-button").addEventListener("click", async () => {
   try {
     await request("/api/clear", { method: "POST" });
     await refreshState();
-    conversation.innerHTML = '<div id="welcome" class="welcome"><div class="welcome-mark">\u2726</div><h2>Index cleared.</h2><p>Upload documents to start a new chat.</p></div>';
+    renderConversation();
+    message.textContent = "Index cleared. Conversation history is kept in this browser.";
   } catch (error) { showError(error); }
 });
 
