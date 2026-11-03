@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from localrag.chat import LocalChat
 from localrag.embeddings import EmbeddingError
-from localrag.web import MAX_UPLOAD_BYTES, LocalRAGServer, create_app
+from localrag.web import MAX_QUESTION_CHARACTERS, MAX_UPLOAD_BYTES, LocalRAGServer, create_app
 
 
 class UnusedOllama:
@@ -87,3 +87,16 @@ def test_chat_reports_embedding_provider_failure_as_gateway_error(
 
     assert response.status_code == 502
     assert response.json()["detail"] == "nomic-embed-text is unavailable"
+
+
+def test_chat_rejects_questions_above_configured_limit(tmp_path: Path) -> None:
+    with client(tmp_path) as browser:
+        response = browser.post(
+            "/api/chat",
+            json={
+                "question": "x" * (MAX_QUESTION_CHARACTERS + 1),
+                "model": "ollama:test",
+            },
+        )
+
+    assert response.status_code == 422

@@ -27,6 +27,7 @@ from .search import LocalIndex
 
 SUPPORTED_SUFFIXES = frozenset({".docx", ".md", ".pdf", ".txt"})
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_QUESTION_CHARACTERS = 8_000
 UPLOAD_COPY_CHUNK_BYTES = 1024 * 1024
 WEB_ROOT = Path(__file__).with_name("web")
 
@@ -42,7 +43,7 @@ def default_data_path() -> Path:
 
 
 class ChatRequest(BaseModel):
-    question: str = Field(min_length=1)
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
     model: str = Field(min_length=1)
     limit: int = Field(default=5, ge=1, le=20)
     threshold: float = Field(default=0.0, ge=0.0, le=1.0)
