@@ -93,6 +93,8 @@ class ChromaIndex:
         threshold: float = 0.0,
         semantic_fallback: bool = False,
     ) -> list[SearchResult]:
+        if not query.strip():
+            raise ValueError("query cannot be empty")
         if limit <= 0:
             raise ValueError("limit must be greater than zero")
         if not 0.0 <= threshold <= 1.0:

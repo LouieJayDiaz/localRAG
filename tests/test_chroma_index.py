@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from localrag.chroma_index import ChromaIndex
 from localrag.ingestion import Document
 
@@ -23,6 +25,14 @@ def test_chroma_search_applies_score_threshold() -> None:
     results = index.search("query", threshold=0.5)
 
     assert [result.document_path for result in results] == [Path("close.md")]
+
+
+def test_chroma_search_rejects_empty_query() -> None:
+    index = object.__new__(ChromaIndex)
+    index.collection = Collection()
+
+    with pytest.raises(ValueError, match="query cannot be empty"):
+        index.search("   ")
 
 
 def test_chroma_reindex_keeps_old_chunks_when_upsert_fails() -> None:
