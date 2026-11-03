@@ -33,9 +33,10 @@ multi-user use is not supported.
 LocalRAG saves its index and uploaded copies in the platform's application-data
 directory (`%LOCALAPPDATA%\LocalRAG` on Windows, `~/Library/Application
 Support/LocalRAG` on macOS, or `$XDG_DATA_HOME/LocalRAG` / `~/.local/share/LocalRAG`
-on Linux). Uploads can be up to 25 MB each. **Clear index** removes the index
-and those uploaded copies. It doesn't remove the original files from your
-computer.
+on Linux). Uploads can be up to 25 MB per file and 100 MB / 50 files per batch.
+Extracted text is limited to 5 million characters per document. **Clear index**
+removes the index and those uploaded copies. It doesn't remove the original files
+from your computer.
 
 ## Search options
 
