@@ -140,3 +140,29 @@ def test_upload_rejects_aggregate_batch_size(tmp_path: Path, monkeypatch: Any) -
     assert response.status_code == 413
     assert "0 MB batch limit" in response.json()["detail"]
     assert list((tmp_path / "uploads").iterdir()) == []
+
+
+def test_upload_reports_embedding_failure_as_service_unavailable(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    class FailingIndex:
+        def __enter__(self) -> "FailingIndex":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def add_documents(self, *_args: object, **_kwargs: object) -> int:
+            raise EmbeddingError("embedding service is unavailable")
+
+    server = LocalRAGServer(data_directory=tmp_path, ollama=UnusedOllama())
+    monkeypatch.setattr(server, "_open_index", lambda: FailingIndex())
+    with TestClient(create_app(server)) as browser:
+        response = browser.post(
+            "/api/documents",
+            files={"uploads": ("notes.md", b"document text", "text/markdown")},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "embedding service is unavailable"
+    assert list((tmp_path / "uploads").iterdir()) == []

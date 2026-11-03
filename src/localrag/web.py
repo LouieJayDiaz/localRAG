@@ -136,7 +136,13 @@ class LocalRAGServer:
                 documents = [read_document(path) for path in stored_paths]
                 with self._open_index() as index:
                     chunks = index.add_documents(documents)
-        except (IngestionError, OSError, RuntimeError, ValueError) as error:
+        except HTTPException:
+            raise
+        except (EmbeddingError, RuntimeError) as error:
+            for path in stored_paths:
+                path.unlink(missing_ok=True)
+            raise HTTPException(status_code=503, detail=str(error)) from error
+        except (IngestionError, OSError, ValueError) as error:
             for path in stored_paths:
                 path.unlink(missing_ok=True)
             raise HTTPException(status_code=400, detail=str(error)) from error
