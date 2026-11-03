@@ -185,11 +185,12 @@ class LocalRAGServer:
                         )
                     else:
                         chat = LocalChat(index, model=model)
-                    response = chat.ask(
+                    sources = chat.retrieve(
                         request.question,
                         limit=request.limit,
                         threshold=request.threshold,
                     )
+            response = chat.answer_with_sources(request.question, sources)
         except (EmbeddingError, ModelError, OSError, RuntimeError, ValueError) as error:
             raise HTTPException(status_code=502, detail=str(error)) from error
         return {

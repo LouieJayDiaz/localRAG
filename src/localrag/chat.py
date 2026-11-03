@@ -51,10 +51,15 @@ class LocalChat:
         self, question: str, *, limit: int = 5, threshold: float = 0.0
     ) -> ChatResponse:
         """Answer a question with numbered citations."""
+        sources = self.retrieve(question, limit=limit, threshold=threshold)
+        return self.answer_with_sources(question, sources)
+
+    def retrieve(
+        self, question: str, *, limit: int = 5, threshold: float = 0.0
+    ) -> tuple[SearchResult, ...]:
+        """Find the passages that will be used to answer a question."""
         if not question.strip():
             raise ValueError("question cannot be empty")
-        self._stop_event.clear()
-
         sources = tuple(
             self.index.search(question, limit=limit, threshold=threshold)
         )
@@ -67,6 +72,15 @@ class LocalChat:
                     semantic_fallback=True,
                 )
             )
+        return sources
+
+    def answer_with_sources(
+        self, question: str, sources: tuple[SearchResult, ...]
+    ) -> ChatResponse:
+        """Generate an answer using an already-retrieved context."""
+        if not question.strip():
+            raise ValueError("question cannot be empty")
+        self._stop_event.clear()
         prompt = build_prompt(question, sources)
         answer = self._generate(prompt)
         return ChatResponse(answer=answer, sources=sources)

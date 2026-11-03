@@ -1,4 +1,5 @@
 from pathlib import Path
+import threading
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -6,6 +7,7 @@ from fastapi.testclient import TestClient
 from localrag.chat import LocalChat
 from localrag.embeddings import EmbeddingError
 from localrag.web import (
+    ChatRequest,
     MAX_QUESTION_CHARACTERS,
     MAX_UPLOAD_BYTES,
     MAX_UPLOAD_FILES,
@@ -84,7 +86,7 @@ def test_chat_reports_embedding_provider_failure_as_gateway_error(
     def fail(*_args: Any, **_kwargs: Any) -> None:
         raise EmbeddingError("nomic-embed-text is unavailable")
 
-    monkeypatch.setattr(LocalChat, "ask", fail)
+    monkeypatch.setattr(LocalChat, "retrieve", fail)
     with client(tmp_path) as browser:
         response = browser.post(
             "/api/chat",
@@ -93,6 +95,39 @@ def test_chat_reports_embedding_provider_failure_as_gateway_error(
 
     assert response.status_code == 502
     assert response.json()["detail"] == "nomic-embed-text is unavailable"
+
+
+def test_chat_releases_index_lock_before_model_generation(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    generation_started = threading.Event()
+    finish_generation = threading.Event()
+    state_completed = threading.Event()
+    server = LocalRAGServer(data_directory=tmp_path, ollama=UnusedOllama())
+
+    def slow_generate(_chat: LocalChat, _prompt: str) -> str:
+        generation_started.set()
+        assert finish_generation.wait(3)
+        return "answer"
+
+    monkeypatch.setattr(LocalChat, "_generate", slow_generate)
+    request = ChatRequest(question="question", model="ollama:test")
+    chat_thread = threading.Thread(target=lambda: server.chat(request))
+    chat_thread.start()
+    assert generation_started.wait(2)
+
+    state_thread = threading.Thread(
+        target=lambda: (server.state(), state_completed.set())
+    )
+    state_thread.start()
+    try:
+        assert state_completed.wait(1)
+    finally:
+        finish_generation.set()
+    chat_thread.join(timeout=3)
+    state_thread.join(timeout=3)
+    assert not chat_thread.is_alive()
+    assert not state_thread.is_alive()
 
 
 def test_chat_rejects_questions_above_configured_limit(tmp_path: Path) -> None:
