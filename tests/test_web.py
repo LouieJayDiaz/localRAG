@@ -5,7 +5,13 @@ from fastapi.testclient import TestClient
 
 from localrag.chat import LocalChat
 from localrag.embeddings import EmbeddingError
-from localrag.web import MAX_QUESTION_CHARACTERS, MAX_UPLOAD_BYTES, LocalRAGServer, create_app
+from localrag.web import (
+    MAX_QUESTION_CHARACTERS,
+    MAX_UPLOAD_BYTES,
+    MAX_UPLOAD_FILES,
+    LocalRAGServer,
+    create_app,
+)
 
 
 class UnusedOllama:
@@ -100,3 +106,15 @@ def test_chat_rejects_questions_above_configured_limit(tmp_path: Path) -> None:
         )
 
     assert response.status_code == 422
+
+
+def test_upload_rejects_batches_with_too_many_files(tmp_path: Path) -> None:
+    files = [
+        ("uploads", (f"note-{index}.txt", b"content", "text/plain"))
+        for index in range(MAX_UPLOAD_FILES + 1)
+    ]
+    with client(tmp_path) as browser:
+        response = browser.post("/api/documents", files=files)
+
+    assert response.status_code == 413
+    assert list((tmp_path / "uploads").iterdir()) == []

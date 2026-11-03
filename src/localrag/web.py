@@ -27,6 +27,8 @@ from .search import LocalIndex
 
 SUPPORTED_SUFFIXES = frozenset({".docx", ".md", ".pdf", ".txt"})
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_UPLOAD_BATCH_BYTES = 100 * 1024 * 1024
+MAX_UPLOAD_FILES = 50
 MAX_QUESTION_CHARACTERS = 8_000
 UPLOAD_COPY_CHUNK_BYTES = 1024 * 1024
 WEB_ROOT = Path(__file__).with_name("web")
@@ -95,6 +97,17 @@ class LocalRAGServer:
             raise HTTPException(status_code=400, detail="Choose at least one document.")
         stored_paths: list[Path] = []
         try:
+            if len(uploads) > MAX_UPLOAD_FILES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Choose no more than {MAX_UPLOAD_FILES} files at a time.",
+                )
+            known_batch_size = sum(upload.size or 0 for upload in uploads)
+            if known_batch_size > MAX_UPLOAD_BATCH_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail="The selected files exceed the 100 MB batch limit.",
+                )
             with self._index_lock:
                 used_destinations: set[Path] = set()
                 for upload in uploads:
