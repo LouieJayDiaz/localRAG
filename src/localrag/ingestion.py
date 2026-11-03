@@ -52,7 +52,10 @@ def _read_pdf(path: Path) -> str:
 
     try:
         reader = PdfReader(str(path))
-        return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        return "\n\n".join(
+            f"[Page {number}]\n{page.extract_text() or ''}"
+            for number, page in enumerate(reader.pages, start=1)
+        )
     except (OSError, PdfReadError, ValueError) as error:
         raise IngestionError(f"Could not read PDF document: {path}") from error
 

@@ -22,6 +22,21 @@ def test_read_document_accepts_utf8_bom(tmp_path: Path) -> None:
     assert read_document(source).content == "BOM content"
 
 
+def test_pdf_extraction_marks_page_boundaries(tmp_path: Path) -> None:
+    pypdf = pytest.importorskip("pypdf")
+    source = tmp_path / "pages.pdf"
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    writer.add_blank_page(width=72, height=72)
+    with source.open("wb") as output:
+        writer.write(output)
+
+    content = read_document(source).content
+
+    assert "[Page 1]" in content
+    assert "[Page 2]" in content
+
+
 def test_read_html_extracts_text_and_ignores_script_content(tmp_path: Path) -> None:
     source = tmp_path / "page.html"
     source.write_text(
