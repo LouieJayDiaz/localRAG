@@ -61,6 +61,21 @@ def test_search_does_not_return_unrelated_chunks(tmp_path: Path) -> None:
         assert index.search("what is in this project?") == []
 
 
+def test_search_weights_distinctive_terms_more_than_common_terms(tmp_path: Path) -> None:
+    with LocalIndex(tmp_path / "index.sqlite3") as index:
+        index.add_documents(
+            [
+                document("Python is a popular language.", "common.md"),
+                document("Python and pandas analyze tabular data.", "specific.md"),
+                document("Python is used for scripting.", "another.md"),
+            ]
+        )
+
+        results = index.search("Python pandas")
+
+    assert results[0].document_path.name == "specific.md"
+
+
 def test_search_threshold_filters_low_scoring_chunks(tmp_path: Path) -> None:
     with LocalIndex(tmp_path / "index.sqlite3") as index:
         index.add_documents(

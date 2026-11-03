@@ -5,6 +5,7 @@ import json
 import math
 import re
 import sqlite3
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -157,15 +158,34 @@ class LocalIndex:
 
         query_tokens = set(_TOKEN_PATTERN.findall(query.casefold()))
         query_embedding = self.embed(query)
-        results: list[SearchResult] = []
-        for path, index, content, serialized_embedding in self._connection.execute(
+        rows = list(self._connection.execute(
             "SELECT document_path, chunk_index, content, embedding FROM chunks"
+        ))
+        tokenized = [
+            set(_TOKEN_PATTERN.findall(content.casefold()))
+            for _, _, content, _ in rows
+        ]
+        document_frequency = Counter(
+            token for tokens in tokenized for token in tokens
+        )
+        idf = {
+            token: math.log1p((len(rows) - count + 0.5) / (count + 0.5))
+            for token, count in document_frequency.items()
+        }
+        query_weight = sum(idf.get(token, math.log1p(len(rows) + 1)) for token in query_tokens)
+        results: list[SearchResult] = []
+        for (path, index, content, serialized_embedding), content_tokens in zip(
+            rows, tokenized, strict=True
         ):
-            content_tokens = set(_TOKEN_PATTERN.findall(content.casefold()))
             overlap = query_tokens & content_tokens
             if not overlap and not semantic_fallback:
                 continue
-            lexical_score = len(overlap) / len(query_tokens) if query_tokens else 0.0
+            lexical_score = (
+                sum(idf.get(token, math.log1p(len(rows) + 1)) for token in overlap)
+                / query_weight
+                if query_weight
+                else 0.0
+            )
             semantic_score = _cosine_similarity(
                 query_embedding, json.loads(serialized_embedding)
             )
