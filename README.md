@@ -15,11 +15,10 @@ It can read the following formats:
 | PNG, JPEG, GIF, BMP, TIFF, WebP | Image dimensions and local OCR text |
 
 Image OCR uses the optional `images` extra (`Pillow` and `pytesseract`).
-`pytesseract` also needs the Tesseract OCR executable installed separately and
-available on `PATH` (on Windows, install Tesseract OCR and restart LocalRAG
-after adding its install directory to `PATH`). If the extra or executable is
-missing, LocalRAG reports that requirement instead of silently indexing an
-empty image.
+LocalRAG automatically finds common Windows Tesseract installations and also
+accepts `LOCALRAG_TESSERACT_PATH`, so a PATH change is usually unnecessary.
+If the extra or executable is missing, LocalRAG reports that requirement
+instead of silently indexing an empty image.
 
 This is still a work in progress, so some parts may be rough.
 
@@ -68,6 +67,32 @@ source .venv/bin/activate
 python -m pip install -e '.[documents,images,web]'
 python -m localrag.web
 ```
+
+### Optional native desktop window
+
+The desktop launcher starts the same local FastAPI app in a native
+pywebview window. If pywebview or its platform backend is unavailable, it
+opens the local URL in your default browser instead:
+
+```powershell
+py -m pip install -e ".[documents,images,web,desktop]"
+py run_desktop.py
+```
+
+For a distributable Windows folder or macOS app bundle, install the build
+extra and use the target platform's build script:
+
+```powershell
+.\scripts\build_desktop.ps1
+```
+
+```sh
+./scripts/build_desktop.sh
+```
+
+See [`packaging/README.md`](packaging/README.md) for the onedir build details.
+The packaged app does not include model files, Ollama, LM Studio, or the
+external Tesseract OCR executable.
 
 Open http://127.0.0.1:8000, add some files, and scan for models. LocalRAG shows
 models it finds in Ollama or LM Studio. It doesn't download or pick a model for
@@ -120,6 +145,21 @@ ollama pull nomic-embed-text
 py -m localrag.web --vector-backend hybrid
 ```
 
+For semantic search without an Ollama embedding server, install the optional
+ONNX-based local embedding backend:
+
+```powershell
+py -m pip install -e ".[documents,images,web,local-embeddings]"
+$env:LOCALRAG_VECTOR_BACKEND = "chroma"
+$env:LOCALRAG_EMBEDDING_PROVIDER = "fastembed"
+py -m localrag.web
+```
+
+The small embedding model downloads once on first use and then runs locally.
+Chat generation still requires Ollama or LM Studio. Switching between
+embedding providers requires re-uploading files (or clearing and rebuilding
+the index) so all vectors use the same model.
+
 The default embedding model is `nomic-embed-text`. You can point LocalRAG at a
 different Ollama server or compatible Ollama embedding model by setting
 `LOCALRAG_OLLAMA_URL` (base URL, default `http://127.0.0.1:11434`) and
@@ -130,7 +170,7 @@ You can also select hybrid mode with `--vector-backend hybrid`, or set
 `export LOCALRAG_EMBEDDING_MODEL=nomic-embed-text`. Chat generation can still use
 Ollama or LM Studio; Chroma embeddings specifically use the configured Ollama
 server. The diagnostics panel reports the configured embedding model and whether
-Ollama has it installed.
+the selected embedding provider is ready.
 
 The Chroma option combines semantic results with SQLite's BM25 keyword results
 using reciprocal-rank fusion. SQLite remains the source of truth, so documents
@@ -162,8 +202,9 @@ it with `localrag`.
   still loaded and that the provider is listening on its local endpoint.
 - **A PDF has no useful text:** it may be scanned or use a layout that needs
   OCR; image OCR currently applies to uploaded image files, not PDF pages.
-- **Image OCR is unavailable:** install LocalRAG with `.[images]`, install the
-  Tesseract OCR runtime, and ensure `tesseract.exe` is on `PATH`.
+- **Image OCR is unavailable:** install LocalRAG with `.[images]` and install
+  Tesseract OCR. LocalRAG finds common Windows installs; otherwise set
+  `LOCALRAG_TESSERACT_PATH` to the executable.
 - **The app cannot start:** run the diagnostics panel and check that the
   virtual environment has the `documents` and `web` extras installed.
 

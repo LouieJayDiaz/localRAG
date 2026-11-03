@@ -558,7 +558,14 @@ class LocalRAGServer:
         configured_backend = os.environ.get("LOCALRAG_VECTOR_BACKEND", "sqlite").casefold()
         backend = "hybrid" if configured_backend == "chroma" else "sqlite"
         embedding_model = os.environ.get(
-            "LOCALRAG_EMBEDDING_MODEL", "nomic-embed-text"
+            "LOCALRAG_LOCAL_EMBEDDING_MODEL"
+            if os.environ.get("LOCALRAG_EMBEDDING_PROVIDER", "ollama").casefold()
+            == "fastembed"
+            else "LOCALRAG_EMBEDDING_MODEL",
+            "BAAI/bge-small-en-v1.5"
+            if os.environ.get("LOCALRAG_EMBEDDING_PROVIDER", "ollama").casefold()
+            == "fastembed"
+            else "nomic-embed-text",
         )
         index_error = None
         try:
@@ -572,7 +579,10 @@ class LocalRAGServer:
             None,
         )
         embedding_ready = None
-        if backend == "hybrid":
+        embedding_provider = os.environ.get(
+            "LOCALRAG_EMBEDDING_PROVIDER", "ollama"
+        ).casefold()
+        if backend == "hybrid" and embedding_provider == "ollama":
             embedding_ready = bool(
                 ollama
                 and ollama["available"]
@@ -593,6 +603,7 @@ class LocalRAGServer:
             "disk_free_bytes": free_bytes,
             "embedding_ready": embedding_ready,
             "embedding_model": embedding_model if backend == "hybrid" else None,
+            "embedding_provider": embedding_provider if backend == "hybrid" else None,
             "providers": providers,
         }
 

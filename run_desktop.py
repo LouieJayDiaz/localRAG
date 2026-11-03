@@ -1,6 +1,6 @@
-"""Launch the LocalRAG Windows desktop application."""
+"""Launch LocalRAG's native web desktop application."""
 
-from localrag.desktop import main
+from localrag.desktop_launcher import main
 
 
 if __name__ == "__main__":

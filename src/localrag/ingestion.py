@@ -1,6 +1,9 @@
 """Read the file types LocalRAG supports."""
 
 import csv
+import os
+import shutil
+import sys
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
@@ -174,6 +177,26 @@ def _read_image(path: Path) -> tuple[str, dict[str, str]]:
         ) from error
 
     try:
+        # Find common Windows installs even when Tesseract was not added to PATH.
+        if not pytesseract.pytesseract.tesseract_cmd or pytesseract.pytesseract.tesseract_cmd == "tesseract":
+            candidates = [
+                shutil.which("tesseract"),
+                os.environ.get("LOCALRAG_TESSERACT_PATH"),
+                os.environ.get("PROGRAMFILES", "") + r"\Tesseract-OCR\tesseract.exe",
+                os.environ.get("PROGRAMFILES(X86)", "") + r"\Tesseract-OCR\tesseract.exe",
+            ]
+            if getattr(sys, "frozen", False):
+                bundled_root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+                candidates.extend(
+                    [
+                        str(bundled_root / "tesseract" / "tesseract.exe"),
+                        str(bundled_root / "tesseract.exe"),
+                    ]
+                )
+            for candidate in candidates:
+                if candidate and Path(candidate).is_file():
+                    pytesseract.pytesseract.tesseract_cmd = candidate
+                    break
         with Image.open(path) as image:
             image_format = image.format or path.suffix.lstrip(".").upper()
             metadata = {

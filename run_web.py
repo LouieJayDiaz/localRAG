@@ -1,4 +1,4 @@
-"""Convenience launcher for the LocalRAG website on Windows."""
+"""Convenience launcher for the LocalRAG website."""
 
 from localrag.web import main
 

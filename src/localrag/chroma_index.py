@@ -1,11 +1,12 @@
 """Optional ChromaDB-backed vector store."""
 
 import math
+import os
 from pathlib import Path
 from typing import Iterable
 
 from .chunking import Chunk, chunk_documents
-from .embeddings import NomicOllamaEmbeddings
+from .embeddings import FastEmbedEmbeddings, NomicOllamaEmbeddings
 from .ingestion import Document
 from .search import SearchResult
 
@@ -24,9 +25,15 @@ class ChromaIndex:
         self.database_path.mkdir(parents=True, exist_ok=True)
         client = chromadb.PersistentClient(path=str(self.database_path))
         self.client = client
+        provider = (
+            FastEmbedEmbeddings()
+            if os.environ.get("LOCALRAG_EMBEDDING_PROVIDER", "ollama").casefold()
+            == "fastembed"
+            else NomicOllamaEmbeddings()
+        )
         self.collection = client.get_or_create_collection(
             name="localrag_documents",
-            embedding_function=NomicOllamaEmbeddings(),
+            embedding_function=provider,
         )
 
     def __enter__(self) -> "ChromaIndex":

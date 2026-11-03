@@ -723,7 +723,10 @@ $("#diagnostics-button").addEventListener("click", async () => {
     ];
     if (health.index_error) lines.push(`Index issue: ${health.index_error}`);
     if (health.embedding_ready !== null) {
-      lines.push(`${health.embedding_model} embedding model ready: ${health.embedding_ready ? "yes" : "no"}`);
+      const provider = health.embedding_provider || "ollama";
+      lines.push(`${provider} / ${health.embedding_model} embedding model ready: ${health.embedding_ready ? "yes" : "no"}`);
+    } else if (health.embedding_provider) {
+      lines.push(`Embedding provider: ${health.embedding_provider} (downloaded on first use)`);
     }
     (health.providers || []).forEach((provider) => {
       lines.push(`${provider.name}: ${provider.available ? "available" : provider.error || "offline"}`);
