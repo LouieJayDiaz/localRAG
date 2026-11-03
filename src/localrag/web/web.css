@@ -119,6 +119,7 @@ textarea::placeholder { color: #686873; }
 #send-button:hover { background: #8368df; }
 #send-button:disabled { opacity: .5; cursor: wait; }
 .message { min-height: 18px; color: #e99595; font-size: 12px; margin: 9px 4px 0; }
+.cancel-index-button { align-self: flex-start; margin: 0 4px; border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; background: var(--panel); color: var(--text); font-size: 11px; }
 footer { display: flex; justify-content: space-between; color: #60606b; font-size: 11px; padding: 18px 4px 0; }
 @media (max-width: 720px) { .sidebar { width: 210px; padding: 22px 14px 14px; } .main { padding: 28px 20px 16px; } .topbar { flex-direction: column; } .model-control { align-self: stretch; } .conversation { margin-top: 28px; } }
 @media (max-width: 520px) { .app-shell { display: block; } .sidebar { width: 100%; min-height: auto; } .brand { display: inline-block; margin-bottom: 25px; } .sidebar-section { max-height: 130px; overflow: auto; } .main { min-height: 70vh; } }

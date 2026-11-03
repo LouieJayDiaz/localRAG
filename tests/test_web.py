@@ -1,5 +1,6 @@
 from pathlib import Path
 import threading
+import time
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -136,6 +137,57 @@ def test_health_endpoint_reports_configuration_without_content(
     assert body["disk_free_bytes"] > 0
     assert "data_directory" in body
     assert "documents" not in body
+
+
+def test_async_index_job_reports_progress_and_indexes_documents(tmp_path: Path) -> None:
+    with client(tmp_path) as browser:
+        response = browser.post(
+            "/api/documents/jobs",
+            files={"uploads": ("notes.md", b"some useful document text", "text/markdown")},
+        )
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+        for _ in range(100):
+            job = browser.get(f"/api/documents/jobs/{job_id}").json()
+            if job["status"] in {"complete", "error", "cancelled"}:
+                break
+            time.sleep(0.01)
+        assert job["status"] == "complete"
+        assert job["completed"] == job["total"] == 1
+        assert job["chunks_added"] > 0
+        assert browser.get("/api/state").json()["document_count"] == 1
+
+
+def test_async_index_job_can_be_cancelled_while_reading(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    reading = threading.Event()
+    finish_read = threading.Event()
+    server = LocalRAGServer(data_directory=tmp_path, ollama=UnusedOllama())
+
+    def slow_read(path: Path) -> Document:
+        reading.set()
+        assert finish_read.wait(3)
+        return Document(path.resolve(), "staged document contents")
+
+    monkeypatch.setattr("localrag.web.read_document", slow_read)
+    with TestClient(create_app(server)) as browser:
+        response = browser.post(
+            "/api/documents/jobs",
+            files={"uploads": ("notes.md", b"document", "text/markdown")},
+        )
+        job_id = response.json()["job_id"]
+        assert reading.wait(2)
+        browser.delete(f"/api/documents/jobs/{job_id}")
+        finish_read.set()
+        for _ in range(100):
+            job = browser.get(f"/api/documents/jobs/{job_id}").json()
+            if job["status"] in {"complete", "error", "cancelled"}:
+                break
+            time.sleep(0.01)
+
+    assert job["status"] == "cancelled"
+    assert list((tmp_path / "uploads").iterdir()) == []
 
 
 def test_oversized_upload_is_removed_without_indexing(tmp_path: Path) -> None:

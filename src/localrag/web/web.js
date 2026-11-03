@@ -13,6 +13,7 @@ function loadChats() {
 let chats = loadChats();
 let activeChatId = null;
 let regeneratePending = false;
+let activeIndexJobId = null;
 try { activeChatId = localStorage.getItem(`${CHAT_STORAGE_KEY}.active`); } catch (_) { /* storage is optional */ }
 
 function saveChats() {
@@ -564,16 +565,42 @@ async function uploadFiles(files, input) {
   const form = new FormData();
   [...files].forEach((file) => form.append("uploads", file, file.name));
   message.textContent = "Reading and indexing documents...";
+  $("#cancel-index").hidden = false;
   try {
-    const result = await request("/api/documents", { method: "POST", body: form });
-    await refreshState();
-    message.textContent = `Indexed ${result.documents_added} file${result.documents_added === 1 ? "" : "s"} (${result.chunks_added} chunks).`;
+    const job = await request("/api/documents/jobs", { method: "POST", body: form });
+    activeIndexJobId = job.job_id;
+    let result;
+    while (true) {
+      result = await request(`/api/documents/jobs/${job.job_id}`);
+      message.textContent = `${result.message} (${result.completed}/${result.total})`;
+      if (["complete", "error", "cancelled"].includes(result.status)) break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    if (result.status === "error") throw new Error(result.message);
+    if (result.status === "cancelled") message.textContent = "Indexing cancelled.";
+    else {
+      await refreshState();
+      message.textContent = `Indexed ${result.documents_added} file${result.documents_added === 1 ? "" : "s"} (${result.chunks_added} chunks).`;
+    }
   } catch (error) { showError(error); }
-  input.value = "";
+  finally {
+    activeIndexJobId = null;
+    $("#cancel-index").hidden = true;
+    input.value = "";
+  }
 }
 
 $("#file-input").addEventListener("change", (event) => uploadFiles(event.target.files, event.target));
 $("#folder-input").addEventListener("change", (event) => uploadFiles(event.target.files, event.target));
+$("#cancel-index").addEventListener("click", async () => {
+  if (!activeIndexJobId) return;
+  $("#cancel-index").disabled = true;
+  try {
+    await request(`/api/documents/jobs/${activeIndexJobId}`, { method: "DELETE" });
+    message.textContent = "Cancelling indexing...";
+  } catch (error) { showError(error); }
+  finally { $("#cancel-index").disabled = false; }
+});
 $("#new-chat").addEventListener("click", createChat);
 $("#export-chat").addEventListener("click", () => {
   const chat = activeChat();
