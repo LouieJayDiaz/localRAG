@@ -12,6 +12,7 @@ import shutil
 import threading
 import uuid
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Annotated, Literal
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -179,7 +180,8 @@ class LocalRAGServer:
         try:
             for upload in uploads:
                 source_key = (upload.filename or "").replace("\\", "/").strip("/")
-                filename = Path(source_key).name
+                source_parts = PurePosixPath(source_key).parts
+                filename = source_parts[-1] if source_parts else ""
                 suffix = Path(filename).suffix.lower()
                 if not filename or suffix not in SUPPORTED_SUFFIXES:
                     supported = ", ".join(sorted(SUPPORTED_SUFFIXES))
@@ -190,7 +192,13 @@ class LocalRAGServer:
                 seen[source_key.casefold()] = occurrence + 1
                 identity = source_key if occurrence == 0 else f"{source_key}#copy-{occurrence}"
                 digest = hashlib.sha256(identity.casefold().encode("utf-8")).hexdigest()[:12]
-                destination = self.upload_directory / f"{Path(filename).stem}--{digest}{suffix}"
+                parent = "--".join(
+                    re.sub(r"[^A-Za-z0-9._-]+", "_", part).strip("._-")
+                    for part in source_parts[:-1]
+                ).strip("-")[:60]
+                stem = Path(filename).stem
+                display_stem = f"{parent}--{stem}" if parent else stem
+                destination = self.upload_directory / f"{display_stem}--{digest}{suffix}"
                 temporary = self.upload_directory / f".upload-{uuid.uuid4().hex}{suffix}"
                 staged.append((temporary, destination))
                 self._copy_upload(upload, temporary, filename)

@@ -73,6 +73,27 @@ def test_reuploading_same_source_replaces_indexed_content(tmp_path: Path) -> Non
     assert "newbravo" in results[0].content
 
 
+def test_folder_uploads_disambiguate_same_basename_by_parent_folder(
+    tmp_path: Path,
+) -> None:
+    with client(tmp_path) as browser:
+        response = browser.post(
+            "/api/documents",
+            files=[
+                ("uploads", ("policies/notes.md", b"policy document", "text/markdown")),
+                ("uploads", ("research/notes.md", b"research document", "text/markdown")),
+            ],
+        )
+
+        assert response.status_code == 200
+        items = browser.get("/api/state").json()["document_items"]
+
+    assert sorted(item["name"] for item in items) == [
+        "policies--notes.md",
+        "research--notes.md",
+    ]
+
+
 def test_clear_removes_indexed_upload_copies(tmp_path: Path) -> None:
     with client(tmp_path) as browser:
         assert browser.post(
