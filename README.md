@@ -25,8 +25,10 @@ you. Install or load one in its app, then scan again.
 When you chat, LocalRAG sends the question and matching passages from your
 files to the model you chose. With Ollama or LM Studio running on your computer,
 that stays on your computer. The server starts on `127.0.0.1`, so other devices
-can't reach it by default. If you change the host to `0.0.0.0`, devices on your
-network may be able to use the site and its API.
+can't reach it by default. The API has no authentication. Keep it bound to
+`127.0.0.1`; binding to `0.0.0.0` can expose document uploads, chats, model
+downloads, and index deletion to other devices on your network. Network or
+multi-user use is not supported.
 
 LocalRAG saves its index and uploaded copies in the platform's application-data
 directory (`%LOCALAPPDATA%\LocalRAG` on Windows, `~/Library/Application
@@ -49,9 +51,12 @@ py -m localrag.web
 ```
 
 The SQLite and ChromaDB indexes are stored separately. If you switch between
-them, upload your files again so the selected index has them. The SQLite search
-is a simple fallback; ChromaDB is more useful when your question uses different
-words from the document.
+them, upload your files again so the selected index has them. SQLite search uses
+token overlap and a small hashed word vector. It is a lightweight fallback, not
+semantic search, so it may miss relevant passages when a question uses different
+words from the document. ChromaDB uses Ollama embeddings for semantic search;
+Ollama and `nomic-embed-text` must be available while indexing and chatting with
+the Chroma backend.
 
 If you installed LocalRAG in the active virtual environment, you can also run
 it with `localrag`.
