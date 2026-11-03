@@ -11,8 +11,24 @@ This is still a work in progress, so some parts may be rough.
 
 You need Python 3.11 or newer. Install [Ollama](https://ollama.com/download)
 or [LM Studio](https://lmstudio.ai/) if you want to chat with a model.
+After cloning the repository, the launcher creates a virtual environment,
+installs LocalRAG's document and web dependencies, and starts the app.
 
 ### Windows (PowerShell)
+
+```powershell
+.\start_localrag.ps1
+```
+
+### macOS and Linux
+
+```sh
+bash start_localrag.sh
+```
+
+To run it manually instead, use the commands below.
+
+#### Windows (PowerShell)
 
 ```powershell
 py -m venv .venv
@@ -21,7 +37,7 @@ py -m pip install -e ".[documents,web]"
 py -m localrag.web
 ```
 
-### macOS and Linux
+#### macOS and Linux
 
 ```sh
 python3 -m venv .venv
