@@ -139,6 +139,12 @@ The default retrieval benchmark is in `tests/test_retrieval_eval.py`. It checks
 recall@3 against a small policy and IT corpus; it is a regression check, not a
 general language understanding score.
 
+Run that focused check with:
+
+```powershell
+py -m pytest tests/test_retrieval_eval.py
+```
+
 If you installed LocalRAG in the active virtual environment, you can also run
 it with `localrag`.
 
