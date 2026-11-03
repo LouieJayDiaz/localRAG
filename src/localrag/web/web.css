@@ -29,8 +29,11 @@ button { cursor: pointer; }
 .section-heading { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .12em; padding: 0 8px 12px; }
 .count { color: var(--purple); }
 .document-list { list-style: none; margin: 0; padding: 0; }
-.document-list li { overflow: hidden; color: #c4c3ce; padding: 9px 8px; border-radius: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.document-list li { display: flex; align-items: center; gap: 6px; color: #c4c3ce; padding: 4px 5px 4px 8px; border-radius: 7px; }
 .document-list li:hover { background: #232329; }
+.document-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remove-document-button { flex: 0 0 auto; border: 0; border-radius: 5px; padding: 2px 7px; background: transparent; color: #8e8d99; font-size: 18px; cursor: pointer; }
+.remove-document-button:hover { background: #442c39; color: #ffb3c0; }
 .quiet-button { color: #a7a5b0; background: transparent; border-color: transparent; margin: 16px 0; }
 .sidebar-footer { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; border-top: 1px solid var(--border); padding: 18px 8px 0; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); }

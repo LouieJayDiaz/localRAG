@@ -27,8 +27,24 @@ async function refreshState() {
   list.replaceChildren();
   state.documents.forEach((name) => {
     const item = document.createElement("li");
-    item.title = name;
-    item.textContent = name;
+    const label = document.createElement("span");
+    label.className = "document-name";
+    label.title = name;
+    label.textContent = name;
+    const remove = document.createElement("button");
+    remove.className = "remove-document-button";
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.title = `Remove ${name}`;
+    remove.setAttribute("aria-label", `Remove ${name}`);
+    remove.addEventListener("click", async () => {
+      try {
+        await request(`/api/documents/${encodeURIComponent(name)}`, { method: "DELETE" });
+        await refreshState();
+        message.textContent = `Removed ${name} from the index.`;
+      } catch (error) { showError(error); }
+    });
+    item.append(label, remove);
     list.append(item);
   });
 }

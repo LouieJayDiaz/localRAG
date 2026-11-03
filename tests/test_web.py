@@ -63,6 +63,28 @@ def test_clear_removes_indexed_upload_copies(tmp_path: Path) -> None:
     assert list((tmp_path / "uploads").iterdir()) == []
 
 
+def test_delete_document_removes_index_entry_and_uploaded_copy(tmp_path: Path) -> None:
+    with client(tmp_path) as browser:
+        uploaded = browser.post(
+            "/api/documents",
+            files={"uploads": ("notes.md", b"delete this document", "text/markdown")},
+        )
+        assert uploaded.status_code == 200
+        name = browser.get("/api/state").json()["documents"][0]
+
+        deleted = browser.delete(f"/api/documents/{name}")
+
+        assert deleted.status_code == 200
+        assert browser.get("/api/state").json()["document_count"] == 0
+
+    assert list((tmp_path / "uploads").iterdir()) == []
+
+
+def test_delete_document_rejects_unknown_identifier(tmp_path: Path) -> None:
+    with client(tmp_path) as browser:
+        assert browser.delete("/api/documents/missing.md").status_code == 404
+
+
 def test_oversized_upload_is_removed_without_indexing(tmp_path: Path) -> None:
     with client(tmp_path) as browser:
         response = browser.post(

@@ -171,6 +171,36 @@ class LocalRAGServer:
             destination.unlink(missing_ok=True)
             raise
 
+    def delete_document(self, document_name: str) -> dict[str, str]:
+        """Remove one indexed document and any LocalRAG-managed upload copy."""
+        if not document_name or Path(document_name).name != document_name:
+            raise HTTPException(status_code=400, detail="Invalid document identifier.")
+        try:
+            with self._index_lock:
+                with self._open_index() as index:
+                    matches = [
+                        path for path in index.list_documents()
+                        if path.name == document_name
+                    ]
+                    if not matches:
+                        raise HTTPException(status_code=404, detail="Document not found.")
+                    if len(matches) > 1:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="More than one document has this name; clear and re-add the files.",
+                        )
+                    path = matches[0].resolve()
+                    if not index.remove_document(path):
+                        raise HTTPException(status_code=404, detail="Document not found.")
+                upload_directory = self.upload_directory.resolve()
+                if path.parent == upload_directory:
+                    path.unlink(missing_ok=True)
+        except HTTPException:
+            raise
+        except (OSError, RuntimeError, ValueError) as error:
+            raise HTTPException(status_code=500, detail=str(error)) from error
+        return {"status": "deleted", "document": document_name}
+
     def chat(self, request: ChatRequest) -> dict[str, object]:
         provider, model = self._split_model(request.model)
         try:
@@ -368,6 +398,10 @@ def create_app(server: LocalRAGServer | None = None) -> FastAPI:
         uploads: Annotated[list[UploadFile], File(description="Documents to index")],
     ) -> dict[str, object]:
         return state.index_uploads(uploads)
+
+    @app.delete("/api/documents/{document_name}")
+    def delete_document(document_name: str) -> dict[str, str]:
+        return state.delete_document(document_name)
 
     @app.post("/api/chat")
     def ask_chat(request: ChatRequest) -> dict[str, object]:
