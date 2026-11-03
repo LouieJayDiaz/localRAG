@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 
 from localrag.chat import LocalChat
 from localrag.embeddings import EmbeddingError
+from localrag.ingestion import Document
+from localrag.search import LocalIndex
 from localrag.web import (
     ChatRequest,
     MAX_QUESTION_CHARACTERS,
@@ -104,6 +106,10 @@ def test_chat_releases_index_lock_before_model_generation(
     finish_generation = threading.Event()
     state_completed = threading.Event()
     server = LocalRAGServer(data_directory=tmp_path, ollama=UnusedOllama())
+    with LocalIndex(server.index_path) as index:
+        index.add_documents(
+            [Document(tmp_path / "notes.md", "A matching question context.")]
+        )
 
     def slow_generate(_chat: LocalChat, _prompt: str) -> str:
         generation_started.set()

@@ -68,6 +68,7 @@ def test_local_chat_wraps_connection_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with LocalIndex(tmp_path / "index.sqlite3") as index:
+        index.add_documents([Document(tmp_path / "notes.md", "Question context.")])
         monkeypatch.setattr(
             "localrag.chat.urlopen",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(
@@ -82,6 +83,7 @@ def test_local_chat_reports_invalid_json(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with LocalIndex(tmp_path / "index.sqlite3") as index:
+        index.add_documents([Document(tmp_path / "notes.md", "Question context.")])
         class Response:
             def __enter__(self) -> "Response":
                 return self
