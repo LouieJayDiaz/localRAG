@@ -1,4 +1,5 @@
 from pathlib import Path
+import sqlite3
 
 import pytest
 
@@ -37,6 +38,29 @@ def test_reindexing_replaces_old_chunks(tmp_path: Path) -> None:
 
     assert count == 1
     assert results[0].content == "new content"
+    with LocalIndex(tmp_path / "index.sqlite3") as reopened:
+        assert reopened.search("old") == []
+
+
+def test_existing_sqlite_index_is_backfilled_into_fts(tmp_path: Path) -> None:
+    database = tmp_path / "index.sqlite3"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE chunks (document_path TEXT NOT NULL, chunk_index INTEGER NOT NULL, "
+        "content TEXT NOT NULL, embedding TEXT NOT NULL, PRIMARY KEY(document_path, chunk_index))"
+    )
+    connection.execute(
+        "INSERT INTO chunks VALUES (?, ?, ?, ?)",
+        (str((tmp_path / "legacy.md").resolve()), 0, "Legacy search content", "[]"),
+    )
+    connection.commit()
+    connection.close()
+
+    with LocalIndex(database) as index:
+        results = index.search("legacy content")
+
+    assert len(results) == 1
+    assert results[0].document_path.name == "legacy.md"
 
 
 def test_index_lists_and_clears_documents(tmp_path: Path) -> None:

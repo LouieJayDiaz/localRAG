@@ -1,11 +1,8 @@
-"""SQLite index and local search."""
+"""SQLite FTS index and local search."""
 
-import hashlib
-import json
 import math
 import re
 import sqlite3
-from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -41,16 +38,47 @@ class LocalIndex:
         self._connection.execute("PRAGMA busy_timeout = 10000")
         self._connection.execute("PRAGMA journal_mode = WAL")
         self._connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS chunks (
+            """CREATE TABLE IF NOT EXISTS chunks (
                 document_path TEXT NOT NULL,
                 chunk_index INTEGER NOT NULL,
                 content TEXT NOT NULL,
                 embedding TEXT NOT NULL,
                 PRIMARY KEY (document_path, chunk_index)
-            )
+            )"""
+        )
+        self._connection.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5("
+            "content, content='chunks', content_rowid='rowid', "
+            "tokenize='unicode61 remove_diacritics 2')"
+        )
+        self._connection.executescript(
+            """
+            CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
+                INSERT INTO chunks_fts(rowid, content) VALUES (new.rowid, new.content);
+            END;
+            CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
+                INSERT INTO chunks_fts(chunks_fts, rowid, content)
+                VALUES ('delete', old.rowid, old.content);
+            END;
+            CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
+                INSERT INTO chunks_fts(chunks_fts, rowid, content)
+                VALUES ('delete', old.rowid, old.content);
+                INSERT INTO chunks_fts(rowid, content) VALUES (new.rowid, new.content);
+            END;
+            CREATE TABLE IF NOT EXISTS localrag_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             """
         )
+        initialized = self._connection.execute(
+            "SELECT value FROM localrag_metadata WHERE key = 'fts_version'"
+        ).fetchone()
+        if initialized is None:
+            self._connection.execute("INSERT INTO chunks_fts(chunks_fts) VALUES ('rebuild')")
+            self._connection.execute(
+                "INSERT INTO localrag_metadata(key, value) VALUES ('fts_version', '1')"
+            )
         self._connection.commit()
 
     def __enter__(self) -> "LocalIndex":
@@ -104,7 +132,7 @@ class LocalIndex:
                         str(chunk.document_path.resolve()),
                         chunk.index,
                         chunk.content,
-                        json.dumps(self.embed(chunk.content)),
+                        "[]",
                     )
                     for chunk in chunks
                 ],
@@ -129,7 +157,7 @@ class LocalIndex:
                         str(chunk.document_path.resolve()),
                         chunk.index,
                         chunk.content,
-                        json.dumps(self.embed(chunk.content)),
+                        "[]",
                     )
                     for chunk in chunk_list
                 ],
@@ -146,8 +174,9 @@ class LocalIndex:
     ) -> list[SearchResult]:
         """Return matching chunks for a query.
 
-        By default, a chunk must share a token with the query. Chat can opt
-        into semantic fallback for broad questions such as "summarize this".
+        Results are ranked by SQLite FTS5's BM25 implementation. The optional
+        semantic_fallback argument is retained for backend compatibility; this
+        keyword index has no semantic vectors and returns no unrelated chunks.
         """
         if not query.strip():
             raise ValueError("query cannot be empty")
@@ -156,60 +185,30 @@ class LocalIndex:
         if not 0.0 <= threshold <= 1.0:
             raise ValueError("threshold must be between zero and one")
 
-        query_tokens = set(_TOKEN_PATTERN.findall(query.casefold()))
-        query_embedding = self.embed(query)
+        query_tokens = sorted(set(_TOKEN_PATTERN.findall(query.casefold())))
+        if not query_tokens:
+            return []
+        match = " OR ".join(f'"{token}"' for token in query_tokens)
         rows = list(self._connection.execute(
-            "SELECT document_path, chunk_index, content, embedding FROM chunks"
+            """SELECT chunks.document_path, chunks.chunk_index, chunks.content,
+                      bm25(chunks_fts) AS rank
+               FROM chunks_fts JOIN chunks ON chunks.rowid = chunks_fts.rowid
+               WHERE chunks_fts MATCH ?
+               ORDER BY rank, chunks.document_path, chunks.chunk_index""",
+            (match,),
         ))
-        tokenized = [
-            set(_TOKEN_PATTERN.findall(content.casefold()))
-            for _, _, content, _ in rows
-        ]
-        document_frequency = Counter(
-            token for tokens in tokenized for token in tokens
-        )
-        idf = {
-            token: math.log1p((len(rows) - count + 0.5) / (count + 0.5))
-            for token, count in document_frequency.items()
-        }
-        query_weight = sum(idf.get(token, math.log1p(len(rows) + 1)) for token in query_tokens)
+        relevance_values = [max(0.0, -float(row[3])) for row in rows]
+        strongest_relevance = max(relevance_values, default=0.0)
+        query_length_factor = len(query_tokens) / (len(query_tokens) + 1)
         results: list[SearchResult] = []
-        for (path, index, content, serialized_embedding), content_tokens in zip(
-            rows, tokenized, strict=True
+        for (path, index, content, _rank), relevance in zip(
+            rows, relevance_values, strict=True
         ):
-            overlap = query_tokens & content_tokens
-            if not overlap and not semantic_fallback:
-                continue
-            lexical_score = (
-                sum(idf.get(token, math.log1p(len(rows) + 1)) for token in overlap)
-                / query_weight
-                if query_weight
-                else 0.0
-            )
-            semantic_score = _cosine_similarity(
-                query_embedding, json.loads(serialized_embedding)
-            )
-            score = (lexical_score * 0.7) + (semantic_score * 0.3)
+            content_tokens = set(_TOKEN_PATTERN.findall(content.casefold()))
+            coverage = len(set(query_tokens) & content_tokens) / len(query_tokens)
+            rank_quality = relevance / strongest_relevance if strongest_relevance else 0.0
+            score = (0.75 * coverage + 0.25 * rank_quality) * query_length_factor
             if score < threshold:
                 continue
-            results.append(
-                SearchResult(Path(path), index, content, score)
-            )
-        results.sort(key=lambda result: (-result.score, str(result.document_path), result.chunk_index))
+            results.append(SearchResult(Path(path), index, content, score))
         return results[:limit]
-
-    def embed(self, text: str) -> list[float]:
-        """Create a local hashed bag-of-words embedding."""
-        vector = [0.0] * self.dimensions
-        tokens = _TOKEN_PATTERN.findall(text.casefold())
-        for token in tokens:
-            digest = hashlib.blake2b(
-                token.encode("utf-8"), digest_size=8
-            ).digest()
-            vector[int.from_bytes(digest, "big") % self.dimensions] += 1.0
-        magnitude = math.sqrt(sum(value * value for value in vector))
-        return [value / magnitude for value in vector] if magnitude else vector
-
-
-def _cosine_similarity(left: list[float], right: list[float]) -> float:
-    return sum(a * b for a, b in zip(left, right, strict=True))
