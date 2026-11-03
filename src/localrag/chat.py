@@ -14,6 +14,12 @@ class ModelError(RuntimeError):
     """Raised when the model cannot answer."""
 
 
+NO_EVIDENCE_ANSWER = (
+    "I couldn't find relevant passages in your indexed documents. "
+    "Try adding a related file or rephrasing your question."
+)
+
+
 @dataclass(frozen=True, slots=True)
 class ChatResponse:
     """An answer and the chunks used for it."""
@@ -80,6 +86,8 @@ class LocalChat:
         """Generate an answer using an already-retrieved context."""
         if not question.strip():
             raise ValueError("question cannot be empty")
+        if not sources:
+            return ChatResponse(answer=NO_EVIDENCE_ANSWER, sources=())
         self._stop_event.clear()
         prompt = build_prompt(question, sources)
         answer = self._generate(prompt)

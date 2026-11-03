@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from localrag.chat import LocalChat, ModelError, build_prompt
+from localrag.chat import NO_EVIDENCE_ANSWER, LocalChat, ModelError, build_prompt
 from localrag.ingestion import Document
 from localrag.search import LocalIndex, SearchResult
 
@@ -101,3 +101,25 @@ def test_local_chat_rejects_empty_model(tmp_path: Path) -> None:
     with LocalIndex(tmp_path / "index.sqlite3") as index:
         with pytest.raises(ValueError):
             LocalChat(index, model=" ")
+
+
+def test_local_chat_refuses_without_retrieved_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with LocalIndex(tmp_path / "index.sqlite3") as index:
+        index.add_documents(
+            [Document(tmp_path / "notes.md", "A note about gardening.")]
+        )
+        monkeypatch.setattr(
+            "localrag.chat.urlopen",
+            lambda *_args, **_kwargs: pytest.fail(
+                "the model should not be called without evidence"
+            ),
+        )
+
+        response = LocalChat(index, model="llama3.2").ask(
+            "What are the server security settings?"
+        )
+
+    assert response.answer == NO_EVIDENCE_ANSWER
+    assert response.sources == ()
