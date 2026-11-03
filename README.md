@@ -9,14 +9,25 @@ This is still a work in progress, so some parts may be rough.
 
 ## Run it
 
-You need Python 3.11 or newer. Install [Ollama](https://ollama.com/download/windows)
+You need Python 3.11 or newer. Install [Ollama](https://ollama.com/download)
 or [LM Studio](https://lmstudio.ai/) if you want to chat with a model.
+
+### Windows (PowerShell)
 
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 py -m pip install -e ".[documents,web]"
 py -m localrag.web
+```
+
+### macOS and Linux
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[documents,web]'
+python -m localrag.web
 ```
 
 Open http://127.0.0.1:8000, add some files, and scan for models. LocalRAG shows
