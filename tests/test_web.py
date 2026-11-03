@@ -118,3 +118,12 @@ def test_upload_rejects_batches_with_too_many_files(tmp_path: Path) -> None:
 
     assert response.status_code == 413
     assert list((tmp_path / "uploads").iterdir()) == []
+
+
+def test_chat_rejects_blank_question_as_validation_error(tmp_path: Path) -> None:
+    with client(tmp_path) as browser:
+        response = browser.post(
+            "/api/chat", json={"question": "   ", "model": "ollama:test"}
+        )
+
+    assert response.status_code == 422

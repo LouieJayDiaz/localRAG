@@ -15,7 +15,7 @@ from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .chat import LocalChat, ModelError
 from .chroma_index import ChromaIndex
@@ -49,6 +49,14 @@ class ChatRequest(BaseModel):
     model: str = Field(min_length=1)
     limit: int = Field(default=5, ge=1, le=20)
     threshold: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    @field_validator("question")
+    @classmethod
+    def question_must_contain_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("question cannot be empty")
+        return value
 
 
 class ModelPullRequest(BaseModel):
