@@ -156,7 +156,7 @@ def test_local_chat_streams_ollama_tokens_incrementally(
             def __iter__(self) -> Any:
                 return iter([
                     b'{"response":"First ","done":false}\n',
-                    b'{"response":"second","done":true}\n',
+                    b'{"response":"second [1]","done":true}\n',
                 ])
 
         monkeypatch.setattr("localrag.chat.urlopen", lambda *_args, **_kwargs: Response())
@@ -165,7 +165,7 @@ def test_local_chat_streams_ollama_tokens_incrementally(
         tokens = chat.stream_tokens("question evidence", sources)
 
         assert next(tokens) == "First "
-        assert next(tokens) == "second"
+        assert next(tokens) == "second [1]"
 
 
 def test_local_chat_streams_lm_studio_sse(
@@ -186,7 +186,7 @@ def test_local_chat_streams_lm_studio_sse(
             def __iter__(self) -> Any:
                 return iter([
                     b'data: {"choices":[{"delta":{"content":"LM "}}]}\n',
-                    b'data: {"choices":[{"delta":{"content":"Studio"}}]}\n',
+                    b'data: {"choices":[{"delta":{"content":"Studio [1]"}}]}\n',
                     b"data: [DONE]\n",
                 ])
 
@@ -194,7 +194,7 @@ def test_local_chat_streams_lm_studio_sse(
         chat = LocalChat(index, model="local-model", protocol="openai")
         sources = chat.retrieve("question evidence")
 
-        assert list(chat.stream_tokens("question evidence", sources)) == ["LM ", "Studio"]
+        assert list(chat.stream_tokens("question evidence", sources)) == ["LM ", "Studio [1]"]
 
 
 def test_local_chat_uses_history_to_retrieve_follow_up_context(
@@ -212,3 +212,17 @@ def test_local_chat_uses_history_to_retrieve_follow_up_context(
         )
 
     assert sources[0].document_path.name == "leave.md"
+
+
+@pytest.mark.parametrize("answer", ["unsupported answer", "answer [2]"])
+def test_local_chat_rejects_answers_without_valid_citations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: str
+) -> None:
+    with LocalIndex(tmp_path / "index.sqlite3") as index:
+        index.add_documents(
+            [Document(tmp_path / "notes.md", "Question evidence is available.")]
+        )
+        monkeypatch.setattr(LocalChat, "_generate", lambda *_args: answer)
+
+        with pytest.raises(ModelError, match="valid citations"):
+            LocalChat(index, model="llama3.2").ask("question evidence")

@@ -1,6 +1,7 @@
 """Chat with a local Ollama model using indexed files."""
 
 import json
+import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ NO_EVIDENCE_ANSWER = (
     "I couldn't find relevant passages in your indexed documents. "
     "Try adding a related file or rephrasing your question."
 )
+_CITATION_PATTERN = re.compile(r"\[(\d+)\]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +102,7 @@ class LocalChat:
         self._stop_event.clear()
         prompt = build_prompt(question, sources, history=history)
         answer = self._generate(prompt)
+        _validate_citations(answer, len(sources))
         return ChatResponse(answer=answer, sources=sources)
 
     def stream_tokens(
@@ -117,11 +120,14 @@ class LocalChat:
         self._stop_event.clear()
         prompt = build_prompt(question, sources, history=history)
         yielded = False
+        parts: list[str] = []
         for token in self._iter_tokens(prompt):
             yielded = True
+            parts.append(token)
             yield token
         if not yielded:
             raise ModelError("Local model response did not contain text")
+        _validate_citations("".join(parts), len(sources))
 
     def _generate(self, prompt: str) -> str:
         answer = "".join(self._iter_tokens(prompt)).strip()
@@ -273,3 +279,13 @@ def build_prompt(
         f"USER QUESTION: {question.strip()}\n\n"
         "ANSWER:"
     )
+
+
+def _validate_citations(answer: str, source_count: int) -> None:
+    """Reject generated answers with missing or out-of-range citations."""
+    citations = [int(number) for number in _CITATION_PATTERN.findall(answer)]
+    if not citations or any(number < 1 or number > source_count for number in citations):
+        raise ModelError(
+            "The model did not provide valid citations for the retrieved passages. "
+            "Try rephrasing your question or use a model that follows citation instructions."
+        )

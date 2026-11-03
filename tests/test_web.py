@@ -99,7 +99,7 @@ def test_stream_chat_emits_sources_tokens_and_completion(
     monkeypatch.setattr(
         LocalChat,
         "stream_tokens",
-        lambda *_args, **_kwargs: iter(["First ", "second."]),
+        lambda *_args, **_kwargs: iter(["First ", "second. [1]"]),
     )
 
     with TestClient(create_app(server)) as browser:
@@ -189,7 +189,7 @@ def test_chat_releases_index_lock_before_model_generation(
     def slow_generate(_chat: LocalChat, _prompt: str) -> str:
         generation_started.set()
         assert finish_generation.wait(3)
-        return "answer"
+        return "answer [1]"
 
     monkeypatch.setattr(LocalChat, "_generate", slow_generate)
     request = ChatRequest(question="question", model="ollama:test")
