@@ -35,8 +35,10 @@ class LocalIndex:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.dimensions = dimensions
         self._connection = sqlite3.connect(
-            self.database_path, check_same_thread=False
+            self.database_path, check_same_thread=False, timeout=10.0
         )
+        self._connection.execute("PRAGMA busy_timeout = 10000")
+        self._connection.execute("PRAGMA journal_mode = WAL")
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS chunks (
