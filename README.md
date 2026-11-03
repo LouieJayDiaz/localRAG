@@ -92,6 +92,15 @@ Extracted text is limited to 5 million characters per document. **Clear index**
 removes the index and those uploaded copies. It doesn't remove the original files
 from your computer.
 
+### Privacy model
+
+LocalRAG does not include telemetry or a hosted inference service. The server
+talks to the local provider selected in the app, and uploaded copies remain in
+the application-data directory until you clear or remove them. Browser chat
+history is separate from the document index and is stored in that browser's
+local storage. Treat the computer account and its storage as the security
+boundary.
+
 ## Search options
 
 By default, LocalRAG uses SQLite FTS5 with BM25-ranked keyword search and a small
@@ -102,15 +111,15 @@ model before starting:
 ```powershell
 py -m pip install -e ".[documents,web,rag]"
 ollama pull nomic-embed-text
-$env:LOCALRAG_VECTOR_BACKEND = "chroma"
-py -m localrag.web
+py -m localrag.web --vector-backend hybrid
 ```
 
 The default embedding model is `nomic-embed-text`. You can point LocalRAG at a
 different Ollama server or compatible Ollama embedding model by setting
 `LOCALRAG_OLLAMA_URL` (base URL, default `http://127.0.0.1:11434`) and
 `LOCALRAG_EMBEDDING_MODEL` (default `nomic-embed-text`) before starting the app.
-For macOS/Linux shells use `export LOCALRAG_VECTOR_BACKEND=chroma`,
+You can also select hybrid mode with `--vector-backend hybrid`, or set
+`LOCALRAG_VECTOR_BACKEND=chroma`. For macOS/Linux shells use `export LOCALRAG_VECTOR_BACKEND=chroma`,
 `export LOCALRAG_OLLAMA_URL=http://127.0.0.1:11434`, and
 `export LOCALRAG_EMBEDDING_MODEL=nomic-embed-text`. Chat generation can still use
 Ollama or LM Studio; Chroma embeddings specifically use the configured Ollama
