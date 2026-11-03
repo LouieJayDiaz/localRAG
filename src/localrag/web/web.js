@@ -142,7 +142,79 @@ function renderProviders(providers) {
     link.rel = "noreferrer";
     link.textContent = `Open ${provider.name} model library \u2197`;
     card.append(link);
+    if (provider.id === "ollama" && provider.available) {
+      addOllamaPullControls(card);
+    }
     list.append(card);
+  });
+}
+
+function addOllamaPullControls(card) {
+  const controls = document.createElement("div");
+  controls.className = "model-pull-controls";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "Model name, for example llama3.2";
+  input.setAttribute("aria-label", "Ollama model name to download");
+  const download = document.createElement("button");
+  download.type = "button";
+  download.textContent = "Download model";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = "Cancel";
+  cancel.hidden = true;
+  const status = document.createElement("span");
+  status.className = "pull-progress";
+  status.setAttribute("role", "status");
+  controls.append(input, download, cancel, status);
+  card.append(controls);
+
+  let jobId = null;
+  cancel.addEventListener("click", async () => {
+    if (!jobId) return;
+    cancel.disabled = true;
+    try {
+      const result = await request(`/api/models/pull/${jobId}`, { method: "DELETE" });
+      status.textContent = result.message || "Cancelling download...";
+    } catch (error) { status.textContent = error.message; }
+  });
+  download.addEventListener("click", async () => {
+    const name = input.value.trim();
+    if (!name) { status.textContent = "Enter an Ollama model name."; return; }
+    download.disabled = true;
+    input.disabled = true;
+    cancel.hidden = false;
+    cancel.disabled = false;
+    try {
+      const started = await request("/api/models/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      jobId = started.job_id;
+      let finished = false;
+      while (!finished) {
+        status.textContent = "Downloading model...";
+        await new Promise((resolve) => setTimeout(resolve, 900));
+        const result = await request(`/api/models/pull/${jobId}`);
+        const progress = result.total > 0
+          ? ` (${Math.floor((result.completed / result.total) * 100)}%)`
+          : "";
+        status.textContent = `${result.message || result.status}${progress}`;
+        finished = ["complete", "error", "cancelled"].includes(result.status);
+      }
+      if ((await request(`/api/models/pull/${jobId}`)).status === "complete") {
+        await refreshModels();
+      }
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      jobId = null;
+      download.disabled = false;
+      input.disabled = false;
+      cancel.hidden = true;
+      cancel.disabled = false;
+    }
   });
 }
 

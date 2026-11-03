@@ -58,6 +58,12 @@ select { max-width: 180px; padding: 9px 30px 9px 12px; border: 1px solid var(--b
 .provider-heading span { color: var(--muted); font-size: 11px; }
 .provider-card p { margin: 7px 0; color: var(--muted); font-size: 12px; }
 .provider-card a { color: var(--purple); font-size: 12px; }
+.model-pull-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.model-pull-controls input { flex: 1 1 220px; min-width: 160px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text); }
+.model-pull-controls button { padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--text); }
+.model-pull-controls button:hover { border-color: var(--purple); }
+.model-pull-controls button:disabled { opacity: .55; cursor: wait; }
+.pull-progress { flex: 1 1 100%; color: var(--muted); font-size: 11px; }
 .provider-links { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; }
 .provider-links a { color: var(--purple); font-size: 12px; }
 .download-status { margin-top: 12px !important; color: #bdb1ec !important; }
