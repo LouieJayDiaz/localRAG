@@ -175,7 +175,7 @@ function addMessage(role, text, sources = []) {
 }
 
 function addSources(row, sources) {
-  if (!sources.length) return;
+  if (!sources.length) return null;
   const details = document.createElement("details");
   details.className = "sources";
   const summary = document.createElement("summary");
@@ -183,10 +183,36 @@ function addSources(row, sources) {
   details.append(summary);
   sources.forEach((source, index) => {
     const sourceText = document.createElement("p");
-    sourceText.textContent = `[${index + 1}] ${source.document} - chunk ${source.chunk} - ${source.content}`;
+    const matchScore = Math.round((Number(source.score) || 0) * 100);
+    sourceText.textContent = `[${index + 1}] ${source.document} - chunk ${source.chunk} - match score ${matchScore}%\n${source.content}`;
     details.append(sourceText);
   });
   row.append(details);
+  return details;
+}
+
+function renderCitedAnswer(bubble, sourcesDetails, answer, sources) {
+  bubble.replaceChildren();
+  const citation = /\[(\d+)\]/g;
+  let cursor = 0;
+  for (const match of answer.matchAll(citation)) {
+    const sourceIndex = Number(match[1]) - 1;
+    if (sourceIndex < 0 || sourceIndex >= sources.length) continue;
+    bubble.append(document.createTextNode(answer.slice(cursor, match.index)));
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "citation-link";
+    link.textContent = match[0];
+    link.setAttribute("aria-label", `Show source ${match[1]}`);
+    link.addEventListener("click", () => {
+      if (!sourcesDetails) return;
+      sourcesDetails.open = true;
+      sourcesDetails.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    bubble.append(link);
+    cursor = match.index + match[0].length;
+  }
+  bubble.append(document.createTextNode(answer.slice(cursor)));
 }
 
 async function uploadFiles(files, input) {
@@ -220,19 +246,24 @@ $("#chat-form").addEventListener("submit", async (event) => {
   const answerRow = addMessage("assistant", "");
   const answerBubble = answerRow.querySelector(".bubble");
   let sources = [];
+  let answer = "";
   try {
     await streamRequest("/api/chat/stream", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question, model }),
     }, (event) => {
       if (event.type === "sources") sources = event.sources || [];
-      else if (event.type === "token") answerBubble.textContent += event.text;
+      else if (event.type === "token") {
+        answer += event.text;
+        answerBubble.textContent = answer;
+      }
       else if (event.type === "error") throw new Error(event.message);
     });
-    addSources(answerRow, sources);
+    const sourcesDetails = addSources(answerRow, sources);
+    renderCitedAnswer(answerBubble, sourcesDetails, answer, sources);
     message.textContent = "";
   } catch (error) {
-    if (!answerBubble.textContent) answerRow.remove();
+    answerRow.remove();
     showError(error);
   }
   $("#send-button").disabled = false;
