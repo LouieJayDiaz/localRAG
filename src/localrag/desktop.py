@@ -9,15 +9,15 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from .chat import LocalChat, ModelError
-from .ingestion import IngestionError, ingest_directory, read_document
+from .ingestion import (
+    IngestionError,
+    SUPPORTED_SUFFIXES,
+    ingest_directory,
+    read_document,
+)
 from .ollama import OllamaClient, OllamaError, OllamaModel
 from .paths import default_data_directory
 from .search import LocalIndex
-
-SUPPORTED_SUFFIXES = {
-    ".csv", ".docx", ".htm", ".html", ".md", ".pdf", ".pptx", ".txt", ".xlsx"
-}
-
 
 class RoundedPanel(tk.Frame):
     """A panel with rounded corners."""
@@ -385,7 +385,9 @@ class LocalRAGApp:
             filetypes=[
                 (
                     "Supported documents",
-                    "*.txt *.md *.pdf *.docx *.html *.htm *.csv *.xlsx *.pptx",
+                    " ".join(
+                        f"*{suffix}" for suffix in sorted(SUPPORTED_SUFFIXES)
+                    ),
                 ),
                 ("All files", "*.*"),
             ],

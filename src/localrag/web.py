@@ -26,7 +26,13 @@ from pydantic import BaseModel, Field, field_validator
 from .chat import LocalChat, ModelError
 from .embeddings import EmbeddingError
 from .hybrid_index import HybridIndex
-from .ingestion import Document, IngestionError, SUPPORTED_SUFFIXES, read_document
+from .ingestion import (
+    IMAGE_SUFFIXES,
+    Document,
+    IngestionError,
+    SUPPORTED_SUFFIXES,
+    read_document,
+)
 from .ollama import OllamaClient, OllamaError
 from .paths import default_data_directory as _default_data_directory
 from .search import LocalIndex
@@ -162,7 +168,11 @@ class LocalRAGServer:
         return {
             "documents": [path.name for path in paths],
             "document_items": [
-                {"id": path.name, "name": _display_document_name(path.name)}
+                {
+                    "id": path.name,
+                    "name": _display_document_name(path.name),
+                    "kind": "image" if path.suffix.casefold() in IMAGE_SUFFIXES else "document",
+                }
                 for path in paths
             ],
             "document_count": len(paths),
@@ -188,7 +198,7 @@ class LocalRAGServer:
             with self._index_lock:
                 staged = self._stage_uploads(uploads)
                 documents = [
-                    Document(destination.resolve(), read_document(temporary).content)
+                    self._document_for_destination(destination, temporary)
                     for temporary, destination in staged
                 ]
                 with self._open_index() as index:
@@ -249,6 +259,11 @@ class LocalRAGServer:
             for temporary, _ in staged:
                 temporary.unlink(missing_ok=True)
             raise
+
+    @staticmethod
+    def _document_for_destination(destination: Path, temporary: Path) -> Document:
+        extracted = read_document(temporary)
+        return Document(destination.resolve(), extracted.content, extracted.metadata)
 
     @staticmethod
     def _upload_error_message(error: Exception, staged: list[tuple[Path, Path]]) -> str:
@@ -331,7 +346,7 @@ class LocalRAGServer:
                             f"({position} of {len(staged)})..."
                         ),
                     )
-                    documents.append(Document(destination.resolve(), read_document(temporary).content))
+                    documents.append(self._document_for_destination(destination, temporary))
                     self._set_index_job(
                         job_id,
                         completed=position,

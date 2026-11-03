@@ -51,6 +51,27 @@ def test_uploads_with_same_name_are_kept_separately(tmp_path: Path) -> None:
     assert display_names == ["notes.md", "notes.md"]
 
 
+def test_image_upload_is_accepted_and_marked_in_state(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(
+        "localrag.web.read_document",
+        lambda path: Document(path, "[Image]\n[OCR text]\nreceipt total"),
+    )
+
+    with client(tmp_path) as browser:
+        response = browser.post(
+            "/api/documents",
+            files={"uploads": ("receipt.webp", b"test image bytes", "image/webp")},
+        )
+
+        assert response.status_code == 200
+        item = browser.get("/api/state").json()["document_items"][0]
+
+    assert item["name"] == "receipt.webp"
+    assert item["kind"] == "image"
+
+
 def test_reuploading_same_source_replaces_indexed_content(tmp_path: Path) -> None:
     with client(tmp_path) as browser:
         first = browser.post(

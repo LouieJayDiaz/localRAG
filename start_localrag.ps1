@@ -21,7 +21,7 @@ if (-not (Test-Path $venvPython)) {
     if ($LASTEXITCODE -ne 0) { throw "Could not create the LocalRAG virtual environment." }
 }
 
-& $venvPython -m pip install -e ".[documents,web]"
+& $venvPython -m pip install -e ".[documents,images,web]"
 if ($LASTEXITCODE -ne 0) { throw "Could not install LocalRAG dependencies." }
 & $venvPython -m localrag.web
 exit $LASTEXITCODE

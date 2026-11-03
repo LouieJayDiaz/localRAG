@@ -12,8 +12,14 @@ It can read the following formats:
 | HTML | Visible page text |
 | CSV, XLSX | Cell values and rows |
 | PPTX | Slide text |
+| PNG, JPEG, GIF, BMP, TIFF, WebP | Image dimensions and local OCR text |
 
-Scanned PDF and image OCR are not supported yet.
+Image OCR uses the optional `images` extra (`Pillow` and `pytesseract`).
+`pytesseract` also needs the Tesseract OCR executable installed separately and
+available on `PATH` (on Windows, install Tesseract OCR and restart LocalRAG
+after adding its install directory to `PATH`). If the extra or executable is
+missing, LocalRAG reports that requirement instead of silently indexing an
+empty image.
 
 This is still a work in progress, so some parts may be rough.
 
@@ -29,7 +35,7 @@ to be a multi-user server or a replacement for a general web search engine.
 You need Python 3.11 or newer. Install [Ollama](https://ollama.com/download)
 or [LM Studio](https://lmstudio.ai/) if you want to chat with a model.
 After cloning the repository, the launcher creates a virtual environment,
-installs LocalRAG's document and web dependencies, and starts the app.
+installs LocalRAG's document, image, and web dependencies, and starts the app.
 
 ### Windows (PowerShell)
 
@@ -50,7 +56,7 @@ To run it manually instead, use the commands below.
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-py -m pip install -e ".[documents,web]"
+py -m pip install -e ".[documents,images,web]"
 py -m localrag.web
 ```
 
@@ -59,7 +65,7 @@ py -m localrag.web
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[documents,web]'
+python -m pip install -e '.[documents,images,web]'
 python -m localrag.web
 ```
 
@@ -109,7 +115,7 @@ embeddings for semantic retrieval, install the optional backend and embedding
 model before starting:
 
 ```powershell
-py -m pip install -e ".[documents,web,rag]"
+py -m pip install -e ".[documents,images,web,rag]"
 ollama pull nomic-embed-text
 py -m localrag.web --vector-backend hybrid
 ```
@@ -155,13 +161,15 @@ it with `localrag`.
 - **Answers are empty or unavailable:** confirm that the selected model is
   still loaded and that the provider is listening on its local endpoint.
 - **A PDF has no useful text:** it may be scanned or use a layout that needs
-  OCR; text extraction alone cannot read those pages.
+  OCR; image OCR currently applies to uploaded image files, not PDF pages.
+- **Image OCR is unavailable:** install LocalRAG with `.[images]`, install the
+  Tesseract OCR runtime, and ensure `tesseract.exe` is on `PATH`.
 - **The app cannot start:** run the diagnostics panel and check that the
   virtual environment has the `documents` and `web` extras installed.
 
 ## Run the tests
 
 ```powershell
-py -m pip install -e ".[documents,test,web]"
+py -m pip install -e ".[documents,images,test,web]"
 py -m pytest
 ```

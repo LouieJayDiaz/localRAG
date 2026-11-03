@@ -91,7 +91,48 @@ def test_read_pptx_extracts_slide_text(tmp_path: Path) -> None:
     assert "Annual leave policy" in content
 
 
-@pytest.mark.parametrize("filename", ["image.png", "no_extension"])
+def test_read_image_extracts_metadata_and_ocr_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    image = pytest.importorskip("PIL.Image")
+    pytesseract = pytest.importorskip("pytesseract")
+    source = tmp_path / "policy.PNG"
+    image.new("RGB", (320, 120), "white").save(source)
+    monkeypatch.setattr(pytesseract, "image_to_string", lambda _image: "Annual leave policy")
+
+    document = read_document(source)
+
+    assert document.metadata == {
+        "media_type": "image/png",
+        "format": "PNG",
+        "width": "320",
+        "height": "120",
+        "mode": "RGB",
+        "frames": "1",
+    }
+    assert "Dimensions: 320 x 120 pixels" in document.content
+    assert "Annual leave policy" in document.content
+
+
+def test_read_image_reports_missing_ocr_dependency(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "scan.png"
+    source.write_bytes(b"not an image")
+    real_import = __import__
+
+    def import_without_pillow(name: str, *args: object, **kwargs: object) -> object:
+        if name == "PIL":
+            raise ImportError("test dependency unavailable")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", import_without_pillow)
+
+    with pytest.raises(IngestionError, match="Image support requires"):
+        read_document(source)
+
+
+@pytest.mark.parametrize("filename", ["image.rtf", "no_extension"])
 def test_read_document_rejects_unsupported_types(tmp_path: Path, filename: str) -> None:
     source = tmp_path / filename
     source.write_text("content", encoding="utf-8")

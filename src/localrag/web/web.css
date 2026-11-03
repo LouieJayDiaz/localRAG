@@ -41,6 +41,8 @@ button { cursor: pointer; }
 .document-list { list-style: none; margin: 0; padding: 0; }
 .document-list li { display: flex; align-items: center; gap: 6px; color: #c4c3ce; padding: 4px 5px 4px 8px; border-radius: 7px; }
 .document-list li:hover { background: #232329; }
+.document-kind { flex: 0 0 auto; min-width: 27px; padding: 2px 3px; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-size: 8px; font-weight: 750; letter-spacing: .04em; text-align: center; }
+.document-kind.image { border-color: #69559e; color: #c4a5ff; }
 .document-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .remove-document-button { flex: 0 0 auto; border: 0; border-radius: 5px; padding: 2px 7px; background: transparent; color: #8e8d99; font-size: 18px; cursor: pointer; }
 .remove-document-button:hover { background: #442c39; color: #ffb3c0; }

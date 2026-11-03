@@ -11,7 +11,7 @@ def main() -> int:
     parser.add_argument(
         "path",
         type=Path,
-        help="A .txt/.md/.pdf/.docx file or a directory of documents",
+        help="A supported document or image file, or a directory of documents",
     )
     arguments = parser.parse_args()
 

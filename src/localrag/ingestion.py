@@ -1,11 +1,16 @@
 """Read the file types LocalRAG supports."""
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Mapping
 
-SUPPORTED_SUFFIXES = frozenset({".csv", ".docx", ".html", ".htm", ".md", ".pdf", ".pptx", ".txt", ".xlsx"})
+IMAGE_SUFFIXES = frozenset({".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"})
+SUPPORTED_SUFFIXES = frozenset({
+    ".bmp", ".csv", ".docx", ".gif", ".html", ".htm", ".jpeg", ".jpg", ".md",
+    ".pdf", ".png", ".pptx", ".tif", ".tiff", ".txt", ".webp", ".xlsx",
+})
 MAX_DOCUMENT_CHARACTERS = 5_000_000
 
 
@@ -34,10 +39,11 @@ class _TextHTMLParser(HTMLParser):
 
 @dataclass(frozen=True, slots=True)
 class Document:
-    """A document and its path."""
+    """A document, its path, and optional source metadata."""
 
     path: Path
     content: str
+    metadata: Mapping[str, str] = field(default_factory=dict)
 
 
 def _read_pdf(path: Path) -> str:
@@ -151,6 +157,58 @@ def _read_pptx(path: Path) -> str:
         raise IngestionError(f"Could not read PowerPoint document: {path}") from error
 
 
+def _read_image(path: Path) -> tuple[str, dict[str, str]]:
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except ImportError as error:
+        raise IngestionError(
+            "Image support requires optional dependencies; install with: "
+            "pip install 'localrag[images]'"
+        ) from error
+    try:
+        import pytesseract
+    except ImportError as error:
+        raise IngestionError(
+            "Image OCR requires optional dependencies; install with: "
+            "pip install 'localrag[images]'"
+        ) from error
+
+    try:
+        with Image.open(path) as image:
+            image_format = image.format or path.suffix.lstrip(".").upper()
+            metadata = {
+                "media_type": f"image/{image_format.casefold().replace('jpg', 'jpeg')}",
+                "format": image_format,
+                "width": str(image.width),
+                "height": str(image.height),
+                "mode": image.mode,
+                "frames": str(getattr(image, "n_frames", 1)),
+            }
+            ocr_text = pytesseract.image_to_string(image).strip()
+    except getattr(pytesseract, "TesseractNotFoundError", OSError) as error:
+        raise IngestionError(
+            "Image OCR requires the Tesseract executable. Install Tesseract OCR "
+            "and add it to PATH, then try the upload again."
+        ) from error
+    except (OSError, UnidentifiedImageError, ValueError) as error:
+        raise IngestionError(f"Could not read image document: {path}") from error
+    except RuntimeError as error:
+        raise IngestionError(f"Image OCR failed: {path}") from error
+
+    content = "\n".join(
+        [
+            "[Image]",
+            f"Format: {metadata['format']}",
+            f"Dimensions: {metadata['width']} x {metadata['height']} pixels",
+            f"Color mode: {metadata['mode']}",
+            f"Frames: {metadata['frames']}",
+            "[OCR text]",
+            ocr_text or "(No text detected.)",
+        ]
+    )
+    return content, metadata
+
+
 def read_document(path: Path) -> Document:
     """Read one supported document."""
     path = path.expanduser()
@@ -162,7 +220,10 @@ def read_document(path: Path) -> Document:
         supported = ", ".join(sorted(SUPPORTED_SUFFIXES))
         raise IngestionError(f"Unsupported document type: {path.suffix or '(none)'}; use {supported}")
 
-    if suffix == ".pdf":
+    metadata: Mapping[str, str] = {}
+    if suffix in IMAGE_SUFFIXES:
+        content, metadata = _read_image(path)
+    elif suffix == ".pdf":
         content = _read_pdf(path)
     elif suffix == ".docx":
         content = _read_docx(path)
@@ -190,7 +251,7 @@ def read_document(path: Path) -> Document:
             f"{MAX_DOCUMENT_CHARACTERS:,} characters."
         )
 
-    return Document(path=path.resolve(), content=content)
+    return Document(path=path.resolve(), content=content, metadata=metadata)
 
 
 def ingest_directory(directory: Path) -> list[Document]:

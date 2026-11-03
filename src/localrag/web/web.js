@@ -245,7 +245,12 @@ async function refreshState() {
   const documentItems = state.document_items || state.documents.map((name) => ({ id: name, name }));
   documentItems.forEach((documentItem) => {
     const name = documentItem.name;
+    const kind = documentItem.kind || "document";
     const item = document.createElement("li");
+    const badge = document.createElement("span");
+    badge.className = `document-kind ${kind}`;
+    badge.textContent = kind === "image" ? "IMG" : "DOC";
+    badge.title = kind === "image" ? "Image with OCR text" : "Document";
     const label = document.createElement("span");
     label.className = "document-name";
     label.title = name;
@@ -263,7 +268,7 @@ async function refreshState() {
         message.textContent = `Removed ${name} from the index.`;
       } catch (error) { showError(error); }
     });
-    item.append(label, remove);
+    item.append(badge, label, remove);
     list.append(item);
   });
 }
