@@ -11,6 +11,19 @@ from .chunking import Chunk, chunk_documents
 from .ingestion import Document
 
 _TOKEN_PATTERN = re.compile(r"[^\W_]+", re.UNICODE)
+_QUERY_SYNONYMS = {
+    "vacation": {"leave", "holiday", "pto"},
+    "leave": {"vacation", "holiday", "pto"},
+    "claiming": {"reimbursement", "expense", "refund"},
+    "claim": {"reimbursement", "expense", "refund"},
+    "money": {"reimbursement", "expense", "refund"},
+    "purchases": {"purchase", "expense", "reimbursement"},
+    "purchase": {"expense", "reimbursement"},
+    "computer": {"laptop", "device", "equipment"},
+    "another": {"replacement", "new"},
+    "forgotten": {"reset", "recovery"},
+    "change": {"reset", "update"},
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,10 +207,13 @@ class LocalIndex:
         if not 0.0 <= threshold <= 1.0:
             raise ValueError("threshold must be between zero and one")
 
-        query_tokens = sorted(set(_TOKEN_PATTERN.findall(query.casefold())))
+        query_tokens = set(_TOKEN_PATTERN.findall(query.casefold()))
         if not query_tokens:
             return []
-        match = " OR ".join(f'"{token}"' for token in query_tokens)
+        expanded_tokens = set(query_tokens)
+        for token in query_tokens:
+            expanded_tokens.update(_QUERY_SYNONYMS.get(token, ()))
+        match = " OR ".join(f'"{token}"' for token in sorted(expanded_tokens))
         rows = list(self._connection.execute(
             """SELECT chunks.document_path, chunks.chunk_index, chunks.content,
                       bm25(chunks_fts) AS rank
@@ -214,7 +230,11 @@ class LocalIndex:
             rows, relevance_values, strict=True
         ):
             content_tokens = set(_TOKEN_PATTERN.findall(content.casefold()))
-            coverage = len(set(query_tokens) & content_tokens) / len(query_tokens)
+            direct_matches = query_tokens & content_tokens
+            synonym_matches = (expanded_tokens - query_tokens) & content_tokens
+            coverage = (
+                len(direct_matches) + 0.5 * len(synonym_matches)
+            ) / (len(query_tokens) + 0.5 * len(expanded_tokens - query_tokens))
             rank_quality = relevance / strongest_relevance if strongest_relevance else 0.0
             score = (0.75 * coverage + 0.25 * rank_quality) * query_length_factor
             if score < threshold:

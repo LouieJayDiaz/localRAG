@@ -40,9 +40,9 @@ from your computer.
 
 ## Search options
 
-By default, LocalRAG uses SQLite FTS5 with BM25-ranked keyword search. To use ChromaDB and Ollama's
-`nomic-embed-text` model instead, install them and set the backend before
-starting the app:
+By default, LocalRAG uses SQLite FTS5 with BM25-ranked keyword search and a small
+English synonym map for common phrasing differences. To use ChromaDB and Ollama's
+`nomic-embed-text` model instead, install them and set the backend before starting:
 
 ```powershell
 py -m pip install -e ".[documents,web,rag]"
@@ -57,6 +57,10 @@ fast local keyword search, not semantic search, so it may miss relevant passages
 when a question uses different words from the document. ChromaDB uses Ollama embeddings for semantic search;
 Ollama and `nomic-embed-text` must be available while indexing and chatting with
 the Chroma backend.
+
+The default retrieval benchmark is in `tests/test_retrieval_eval.py`. It checks
+recall@3 against a small policy and IT corpus; it is a regression check, not a
+general language understanding score.
 
 If you installed LocalRAG in the active virtual environment, you can also run
 it with `localrag`.
