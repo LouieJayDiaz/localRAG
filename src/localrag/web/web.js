@@ -61,7 +61,9 @@ async function refreshState() {
   $("#document-count").textContent = state.document_count;
   const list = $("#document-list");
   list.replaceChildren();
-  state.documents.forEach((name) => {
+  const documentItems = state.document_items || state.documents.map((name) => ({ id: name, name }));
+  documentItems.forEach((documentItem) => {
+    const name = documentItem.name;
     const item = document.createElement("li");
     const label = document.createElement("span");
     label.className = "document-name";
@@ -75,7 +77,7 @@ async function refreshState() {
     remove.setAttribute("aria-label", `Remove ${name}`);
     remove.addEventListener("click", async () => {
       try {
-        await request(`/api/documents/${encodeURIComponent(name)}`, { method: "DELETE" });
+        await request(`/api/documents/${encodeURIComponent(documentItem.id)}`, { method: "DELETE" });
         await refreshState();
         message.textContent = `Removed ${name} from the index.`;
       } catch (error) { showError(error); }

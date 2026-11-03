@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import threading
 import uuid
@@ -33,6 +34,13 @@ MAX_UPLOAD_FILES = 50
 MAX_QUESTION_CHARACTERS = 8_000
 UPLOAD_COPY_CHUNK_BYTES = 1024 * 1024
 WEB_ROOT = Path(__file__).with_name("web")
+_UPLOAD_ID_SUFFIX = re.compile(r"--?[0-9a-f]{12}$")
+
+
+def _display_document_name(stored_name: str) -> str:
+    path = Path(stored_name)
+    display_stem = _UPLOAD_ID_SUFFIX.sub("", path.stem)
+    return f"{display_stem}{path.suffix}"
 
 
 def default_data_directory() -> Path:
@@ -98,6 +106,10 @@ class LocalRAGServer:
             raise HTTPException(status_code=500, detail=str(error)) from error
         return {
             "documents": [path.name for path in paths],
+            "document_items": [
+                {"id": path.name, "name": _display_document_name(path.name)}
+                for path in paths
+            ],
             "document_count": len(paths),
         }
 
@@ -129,7 +141,7 @@ class LocalRAGServer:
                             f"Unsupported document type: {filename or '(none)'}; use {supported}"
                         )
                     stem = Path(filename).stem
-                    destination = self.upload_directory / f"{stem}-{uuid.uuid4().hex[:12]}{suffix}"
+                    destination = self.upload_directory / f"{stem}--{uuid.uuid4().hex[:12]}{suffix}"
                     stored_paths.append(destination)
                     used_destinations.add(destination)
                     self._copy_upload(upload, destination, filename)
@@ -228,7 +240,7 @@ class LocalRAGServer:
             "answer": response.answer,
             "sources": [
                 {
-                    "document": source.document_path.name,
+                    "document": _display_document_name(source.document_path.name),
                     "chunk": source.chunk_index,
                     "score": source.score,
                     "content": source.content,
@@ -434,7 +446,7 @@ def create_app(server: LocalRAGServer | None = None) -> FastAPI:
         def events():
             source_data = [
                 {
-                    "document": source.document_path.name,
+                    "document": _display_document_name(source.document_path.name),
                     "chunk": source.chunk_index,
                     "score": source.score,
                     "content": source.content,

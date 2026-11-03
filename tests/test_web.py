@@ -40,11 +40,14 @@ def test_uploads_with_same_name_are_kept_separately(tmp_path: Path) -> None:
 
         assert response.status_code == 200
         assert response.json()["documents_added"] == 2
-        documents = browser.get("/api/state").json()["documents"]
+        state = browser.get("/api/state").json()
+        documents = state["documents"]
+        display_names = [item["name"] for item in state["document_items"]]
 
     assert len(documents) == 2
     assert len(set(documents)) == 2
-    assert all(name.startswith("notes-") for name in documents)
+    assert all(name.startswith("notes--") for name in documents)
+    assert display_names == ["notes.md", "notes.md"]
 
 
 def test_clear_removes_indexed_upload_copies(tmp_path: Path) -> None:
