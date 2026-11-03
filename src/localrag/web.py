@@ -318,6 +318,8 @@ class LocalRAGServer:
                     raise InterruptedError("Indexing cancelled.")
                 self._set_index_job(job_id, status="indexing", message="Adding documents to the search index...")
                 with self._index_lock:
+                    if cancel_event.is_set():
+                        raise InterruptedError("Indexing cancelled.")
                     with self._open_index() as index:
                         chunks = index.add_documents(documents)
                 for temporary, destination in staged:
@@ -609,6 +611,15 @@ class LocalRAGServer:
                 self._pulls[job_id].update(values)
 
     def clear(self) -> dict[str, str]:
+        with self._index_jobs_lock:
+            for job_id, status in self._index_jobs.items():
+                if status.get("status") not in {"queued", "reading", "indexing", "cancelling"}:
+                    continue
+                event = self._index_events.get(job_id)
+                if event is not None:
+                    event.set()
+                    status.update(status="cancelling", message="Cancelling because the index is being cleared...")
+                    self._write_index_job_status(job_id, status)
         try:
             with self._index_lock:
                 with self._open_index() as index:

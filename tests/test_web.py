@@ -275,6 +275,40 @@ def test_index_job_status_survives_restart_and_marks_interrupted_work(
     assert "Re-upload" in restarted_server.index_job_status(job_id)["message"]
 
 
+def test_clear_cancels_queued_index_jobs_before_they_can_repopulate_index(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    reading = threading.Event()
+    finish_read = threading.Event()
+    server = LocalRAGServer(data_directory=tmp_path, ollama=UnusedOllama())
+
+    def slow_read(path: Path) -> Document:
+        reading.set()
+        assert finish_read.wait(3)
+        return Document(path.resolve(), "staged document contents")
+
+    monkeypatch.setattr("localrag.web.read_document", slow_read)
+    with TestClient(create_app(server)) as browser:
+        response = browser.post(
+            "/api/documents/jobs",
+            files={"uploads": ("notes.md", b"document", "text/markdown")},
+        )
+        job_id = response.json()["job_id"]
+        assert reading.wait(2)
+        assert browser.post("/api/clear").status_code == 200
+        finish_read.set()
+        for _ in range(100):
+            job = browser.get(f"/api/documents/jobs/{job_id}").json()
+            if job["status"] in {"complete", "error", "cancelled", "interrupted"}:
+                break
+            time.sleep(0.01)
+
+        assert browser.get("/api/state").json()["document_count"] == 0
+
+    assert job["status"] == "cancelled"
+    assert list((tmp_path / "uploads").iterdir()) == []
+
+
 def test_oversized_upload_is_removed_without_indexing(tmp_path: Path) -> None:
     with client(tmp_path) as browser:
         response = browser.post(
