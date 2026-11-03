@@ -83,6 +83,8 @@ class OllamaClient:
                     if not raw_line.strip():
                         continue
                     message = json.loads(raw_line.decode("utf-8"))
+                    if not isinstance(message, dict):
+                        raise OllamaError("Ollama returned invalid download progress")
                     if progress is not None:
                         progress(message)
                     if message.get("error"):

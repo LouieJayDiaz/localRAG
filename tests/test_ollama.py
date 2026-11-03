@@ -62,6 +62,16 @@ def test_pull_model_reports_streamed_progress(monkeypatch: pytest.MonkeyPatch) -
     assert events[-1]["status"] == "success"
 
 
+def test_pull_model_rejects_non_object_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "localrag.ollama.urlopen",
+        lambda *_args, **_kwargs: Response(b'["not", "an", "object"]\n'),
+    )
+
+    with pytest.raises(OllamaError, match="invalid download progress"):
+        OllamaClient().pull_model("llama3.2")
+
+
 def test_pull_model_rejects_empty_name() -> None:
     with pytest.raises(ValueError):
         OllamaClient().pull_model(" ")
