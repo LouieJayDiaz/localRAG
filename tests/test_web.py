@@ -255,6 +255,26 @@ def test_async_index_job_can_be_cancelled_while_reading(
     assert list((tmp_path / "uploads").iterdir()) == []
 
 
+def test_index_job_status_survives_restart_and_marks_interrupted_work(
+    tmp_path: Path,
+) -> None:
+    job_id = "a" * 32
+    server = LocalRAGServer(data_directory=tmp_path, ollama=UnusedOllama())
+    server._index_jobs[job_id] = {
+        "job_id": job_id,
+        "status": "indexing",
+        "completed": 0,
+        "total": 1,
+        "message": "Adding documents to the search index...",
+    }
+    server._write_index_job_status(job_id, server._index_jobs[job_id])
+
+    restarted_server = LocalRAGServer(data_directory=tmp_path, ollama=UnusedOllama())
+
+    assert restarted_server.index_job_status(job_id)["status"] == "interrupted"
+    assert "Re-upload" in restarted_server.index_job_status(job_id)["message"]
+
+
 def test_oversized_upload_is_removed_without_indexing(tmp_path: Path) -> None:
     with client(tmp_path) as browser:
         response = browser.post(

@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import ipaddress
 import json
+import logging
 import os
 import re
 import shutil
@@ -37,6 +38,8 @@ MAX_QUESTION_CHARACTERS = 8_000
 UPLOAD_COPY_CHUNK_BYTES = 1024 * 1024
 WEB_ROOT = Path(__file__).with_name("web")
 _UPLOAD_ID_SUFFIX = re.compile(r"--?[0-9a-f]{12}$")
+_JOB_ID_PATTERN = re.compile(r"[0-9a-f]{32}$")
+_LOGGER = logging.getLogger(__name__)
 
 
 def _display_document_name(stored_name: str) -> str:
@@ -111,6 +114,39 @@ class LocalRAGServer:
         self._index_jobs: dict[str, dict[str, object]] = {}
         self._index_events: dict[str, threading.Event] = {}
         self._index_jobs_lock = threading.Lock()
+        self._index_jobs_directory = self.data_directory / "index-jobs"
+        self._index_jobs_directory.mkdir(parents=True, exist_ok=True)
+        self._restore_index_jobs()
+
+    def _restore_index_jobs(self) -> None:
+        """Restore durable job status and mark work interrupted by a restart."""
+        for path in self._index_jobs_directory.glob("*.json"):
+            if not _JOB_ID_PATTERN.fullmatch(path.stem):
+                continue
+            try:
+                status = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                _LOGGER.warning("Skipping unreadable indexing job status: %s", path.name)
+                continue
+            if not isinstance(status, dict) or status.get("job_id") != path.stem:
+                continue
+            if status.get("status") in {"queued", "reading", "indexing", "cancelling"}:
+                status.update(
+                    status="interrupted",
+                    message="Indexing stopped when LocalRAG closed. Re-upload these files to continue.",
+                )
+                self._write_index_job_status(path.stem, status)
+            self._index_jobs[path.stem] = status
+
+    def _write_index_job_status(self, job_id: str, status: dict[str, object]) -> None:
+        path = self._index_jobs_directory / f"{job_id}.json"
+        temporary = path.with_suffix(".tmp")
+        try:
+            temporary.write_text(json.dumps(status), encoding="utf-8")
+            temporary.replace(path)
+        except OSError:
+            temporary.unlink(missing_ok=True)
+            _LOGGER.exception("Could not persist indexing job status %s", job_id)
 
     def _open_index(self) -> LocalIndex | ChromaIndex:
         if os.environ.get("LOCALRAG_VECTOR_BACKEND", "sqlite").casefold() == "chroma":
@@ -263,6 +299,7 @@ class LocalRAGServer:
                 "message": "Waiting to index documents...",
             }
             self._index_events[job_id] = cancel_event
+            self._write_index_job_status(job_id, self._index_jobs[job_id])
 
         def process() -> None:
             self._set_index_job(job_id, status="reading", message="Reading documents...")
@@ -328,6 +365,7 @@ class LocalRAGServer:
         with self._index_jobs_lock:
             if job_id in self._index_jobs:
                 self._index_jobs[job_id].update(values)
+                self._write_index_job_status(job_id, self._index_jobs[job_id])
 
     def delete_document(self, document_name: str) -> dict[str, str]:
         """Remove one indexed document and any LocalRAG-managed upload copy."""

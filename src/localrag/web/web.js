@@ -13,7 +13,7 @@ function loadChats() {
 let chats = loadChats();
 let activeChatId = null;
 let regeneratePending = false;
-let activeIndexJobId = null;
+let activeIndexJobId = localStorage.getItem("localrag-active-index-job");
 try { activeChatId = localStorage.getItem(`${CHAT_STORAGE_KEY}.active`); } catch (_) { /* storage is optional */ }
 
 function saveChats() {
@@ -568,26 +568,41 @@ async function uploadFiles(files, input) {
   $("#cancel-index").hidden = false;
   try {
     const job = await request("/api/documents/jobs", { method: "POST", body: form });
-    activeIndexJobId = job.job_id;
+    await observeIndexJob(job.job_id);
+  } catch (error) { showError(error); }
+  finally {
+    input.value = "";
+  }
+}
+
+async function observeIndexJob(jobId) {
+  activeIndexJobId = jobId;
+  localStorage.setItem("localrag-active-index-job", jobId);
+  $("#cancel-index").hidden = false;
+  try {
     let result;
     while (true) {
-      result = await request(`/api/documents/jobs/${job.job_id}`);
+      result = await request(`/api/documents/jobs/${jobId}`);
       message.textContent = `${result.message} (${result.completed}/${result.total})`;
-      if (["complete", "error", "cancelled"].includes(result.status)) break;
+      if (["complete", "error", "cancelled", "interrupted"].includes(result.status)) break;
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
     if (result.status === "error") throw new Error(result.message);
-    if (result.status === "cancelled") message.textContent = "Indexing cancelled.";
-    else {
+    if (result.status === "complete") {
       await refreshState();
       message.textContent = `Indexed ${result.documents_added} file${result.documents_added === 1 ? "" : "s"} (${result.chunks_added} chunks).`;
     }
-  } catch (error) { showError(error); }
-  finally {
+  } finally {
     activeIndexJobId = null;
+    localStorage.removeItem("localrag-active-index-job");
     $("#cancel-index").hidden = true;
-    input.value = "";
   }
+}
+
+async function resumeIndexJob() {
+  const jobId = localStorage.getItem("localrag-active-index-job");
+  if (!jobId) return;
+  await observeIndexJob(jobId);
 }
 
 $("#file-input").addEventListener("change", (event) => uploadFiles(event.target.files, event.target));
@@ -729,4 +744,4 @@ else {
   renderChatList();
   renderConversation();
 }
-Promise.all([refreshState(), refreshModels()]).catch(showError);
+Promise.all([refreshState(), refreshModels()]).then(resumeIndexJob).catch(showError);
