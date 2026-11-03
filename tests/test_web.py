@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from localrag.chat import LocalChat
 from localrag.embeddings import EmbeddingError
-from localrag.ingestion import Document
+from localrag.ingestion import Document, IngestionError
 from localrag.search import LocalIndex
 from localrag.web import (
     ChatRequest,
@@ -253,6 +253,33 @@ def test_async_index_job_can_be_cancelled_while_reading(
             time.sleep(0.01)
 
     assert job["status"] == "cancelled"
+    assert list((tmp_path / "uploads").iterdir()) == []
+
+
+def test_index_job_error_uses_original_filename_instead_of_staging_path(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    server = LocalRAGServer(data_directory=tmp_path, ollama=UnusedOllama())
+
+    def fail_read(path: Path) -> Document:
+        raise IngestionError(f"Could not read document: {path}")
+
+    monkeypatch.setattr("localrag.web.read_document", fail_read)
+    with TestClient(create_app(server)) as browser:
+        response = browser.post(
+            "/api/documents/jobs",
+            files={"uploads": ("notes.md", b"invalid file", "text/markdown")},
+        )
+        job_id = response.json()["job_id"]
+        for _ in range(100):
+            job = browser.get(f"/api/documents/jobs/{job_id}").json()
+            if job["status"] in {"complete", "error", "cancelled", "interrupted"}:
+                break
+            time.sleep(0.01)
+
+    assert job["status"] == "error"
+    assert "notes.md" in job["message"]
+    assert ".upload-" not in job["message"]
     assert list((tmp_path / "uploads").iterdir()) == []
 
 

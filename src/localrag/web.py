@@ -200,11 +200,17 @@ class LocalRAGServer:
         except (EmbeddingError, RuntimeError) as error:
             for temporary, _ in staged:
                 temporary.unlink(missing_ok=True)
-            raise HTTPException(status_code=503, detail=str(error)) from error
+            raise HTTPException(
+                status_code=503,
+                detail=self._upload_error_message(error, staged),
+            ) from error
         except (IngestionError, OSError, ValueError) as error:
             for temporary, _ in staged:
                 temporary.unlink(missing_ok=True)
-            raise HTTPException(status_code=400, detail=str(error)) from error
+            raise HTTPException(
+                status_code=400,
+                detail=self._upload_error_message(error, staged),
+            ) from error
         finally:
             for upload in uploads:
                 upload.file.close()
@@ -243,6 +249,15 @@ class LocalRAGServer:
             for temporary, _ in staged:
                 temporary.unlink(missing_ok=True)
             raise
+
+    @staticmethod
+    def _upload_error_message(error: Exception, staged: list[tuple[Path, Path]]) -> str:
+        message = str(error)
+        for temporary, destination in staged:
+            message = message.replace(
+                str(temporary), _display_document_name(destination.name)
+            )
+        return message
 
     @staticmethod
     def _copy_upload(upload: UploadFile, destination: Path, filename: str) -> None:
@@ -308,6 +323,14 @@ class LocalRAGServer:
                 for position, (temporary, destination) in enumerate(staged, start=1):
                     if cancel_event.is_set():
                         raise InterruptedError("Indexing cancelled.")
+                    self._set_index_job(
+                        job_id,
+                        status="reading",
+                        message=(
+                            f"Reading {_display_document_name(destination.name)} "
+                            f"({position} of {len(staged)})..."
+                        ),
+                    )
                     documents.append(Document(destination.resolve(), read_document(temporary).content))
                     self._set_index_job(
                         job_id,
@@ -339,7 +362,11 @@ class LocalRAGServer:
             except (EmbeddingError, IngestionError, OSError, RuntimeError, ValueError) as error:
                 for temporary, _ in staged:
                     temporary.unlink(missing_ok=True)
-                self._set_index_job(job_id, status="error", message=str(error))
+                self._set_index_job(
+                    job_id,
+                    status="error",
+                    message=self._upload_error_message(error, staged),
+                )
 
         threading.Thread(target=process, name=f"localrag-index-{job_id}", daemon=True).start()
         return {"job_id": job_id, "status": "queued", "total": len(staged)}
