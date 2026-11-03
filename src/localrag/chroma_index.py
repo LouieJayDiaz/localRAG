@@ -48,6 +48,14 @@ class ChromaIndex:
         if ids:
             self.collection.delete(ids=ids)
 
+    def remove_document(self, document_path: Path) -> bool:
+        """Remove all chunks for one indexed document."""
+        path = str(document_path.expanduser().resolve())
+        existing = self.collection.get(where={"document_path": path})["ids"]
+        if existing:
+            self.collection.delete(ids=existing)
+        return bool(existing)
+
     def add_documents(
         self,
         documents: Iterable[Document],

@@ -67,3 +67,20 @@ def test_chroma_reindex_keeps_old_chunks_when_upsert_fails() -> None:
         assert str(error) == "embedding failed"
     else:
         raise AssertionError("expected the replacement to fail")
+
+
+def test_chroma_removes_document_chunks() -> None:
+    class DeletableCollection:
+        deleted: list[str] = []
+
+        def get(self, **_: object) -> dict[str, list[str]]:
+            return {"ids": ["/tmp/notes.md::0", "/tmp/notes.md::1"]}
+
+        def delete(self, *, ids: list[str]) -> None:
+            self.deleted.extend(ids)
+
+    index = object.__new__(ChromaIndex)
+    index.collection = DeletableCollection()
+
+    assert index.remove_document(Path("/tmp/notes.md"))
+    assert index.collection.deleted == ["/tmp/notes.md::0", "/tmp/notes.md::1"]

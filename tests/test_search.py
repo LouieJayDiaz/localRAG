@@ -76,6 +76,18 @@ def test_index_lists_and_clears_documents(tmp_path: Path) -> None:
         assert index.search("one") == []
 
 
+def test_index_removes_one_document(tmp_path: Path) -> None:
+    first = document("alpha document", str(tmp_path / "alpha.md"))
+    second = document("beta document", str(tmp_path / "beta.md"))
+    with LocalIndex(tmp_path / "index.sqlite3") as index:
+        index.add_documents([first, second])
+
+        assert index.remove_document(first.path)
+        assert not index.remove_document(first.path)
+        assert [path.name for path in index.list_documents()] == ["beta.md"]
+        assert index.search("alpha") == []
+
+
 def test_search_does_not_return_unrelated_chunks(tmp_path: Path) -> None:
     with LocalIndex(tmp_path / "index.sqlite3") as index:
         index.add_documents(

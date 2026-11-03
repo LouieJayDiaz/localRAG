@@ -102,6 +102,15 @@ class LocalIndex:
         with self._connection:
             self._connection.execute("DELETE FROM chunks")
 
+    def remove_document(self, document_path: Path) -> bool:
+        """Remove one document from the index and report whether it existed."""
+        with self._connection:
+            cursor = self._connection.execute(
+                "DELETE FROM chunks WHERE document_path = ?",
+                (str(document_path.expanduser().resolve()),),
+            )
+        return cursor.rowcount > 0
+
     def add_documents(
         self,
         documents: Iterable[Document],
