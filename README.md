@@ -2,8 +2,18 @@
 
 I built LocalRAG because I wanted to ask questions about my own files. It runs
 as a website on your computer and uses Ollama or LM Studio to answer questions.
-It can read `.txt`, `.md`, `.pdf`, `.docx`, `.html`, `.csv`, `.xlsx`, and `.pptx`
-files. Scanned PDF and image OCR are not supported yet.
+It can read the following formats:
+
+| Format | Notes |
+| --- | --- |
+| TXT, Markdown | UTF-8 text |
+| PDF | Text-based PDFs; page references are preserved |
+| DOCX | Paragraphs and tables |
+| HTML | Visible page text |
+| CSV, XLSX | Cell values and rows |
+| PPTX | Slide text |
+
+Scanned PDF and image OCR are not supported yet.
 
 This is still a work in progress, so some parts may be rough.
 
