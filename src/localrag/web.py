@@ -112,9 +112,10 @@ class LocalRAGServer:
                 )
             known_batch_size = sum(upload.size or 0 for upload in uploads)
             if known_batch_size > MAX_UPLOAD_BATCH_BYTES:
+                batch_limit_mb = MAX_UPLOAD_BATCH_BYTES // (1024 * 1024)
                 raise HTTPException(
                     status_code=413,
-                    detail="The selected files exceed the 100 MB batch limit.",
+                    detail=f"The selected files exceed the {batch_limit_mb} MB batch limit.",
                 )
             with self._index_lock:
                 used_destinations: set[Path] = set()

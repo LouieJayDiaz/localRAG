@@ -127,3 +127,16 @@ def test_chat_rejects_blank_question_as_validation_error(tmp_path: Path) -> None
         )
 
     assert response.status_code == 422
+
+
+def test_upload_rejects_aggregate_batch_size(tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setattr("localrag.web.MAX_UPLOAD_BATCH_BYTES", 5)
+    with client(tmp_path) as browser:
+        response = browser.post(
+            "/api/documents",
+            files={"uploads": ("notes.md", b"sixsix", "text/markdown")},
+        )
+
+    assert response.status_code == 413
+    assert "0 MB batch limit" in response.json()["detail"]
+    assert list((tmp_path / "uploads").iterdir()) == []
