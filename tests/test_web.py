@@ -200,6 +200,7 @@ def test_health_uses_configured_embedding_model(
 
     result = server.health()
 
+    assert result["backend"] == "hybrid"
     assert result["embedding_ready"] is True
     assert result["embedding_model"] == "custom-embed:latest"
 

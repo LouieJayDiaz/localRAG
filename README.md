@@ -84,13 +84,14 @@ Ollama or LM Studio; Chroma embeddings specifically use the configured Ollama
 server. The diagnostics panel reports the configured embedding model and whether
 Ollama has it installed.
 
-The SQLite and ChromaDB indexes are stored separately. If you switch between
-them, upload your files again so the selected index has them. SQLite search is
-fast local keyword search, not semantic search, so it may miss relevant passages
-when a question uses different words from the document. ChromaDB uses the
-configured Ollama embedding model for semantic search; Ollama and that model must
-be available while indexing and chatting with the Chroma backend. Switching
-embedding models requires re-indexing documents.
+The Chroma option combines semantic results with SQLite's BM25 keyword results
+using reciprocal-rank fusion. SQLite remains the source of truth, so documents
+already indexed there remain searchable when you enable Chroma; re-upload them
+to add semantic vectors. If Ollama or the embedding model is unavailable, the
+hybrid backend falls back to SQLite search instead of failing the upload or
+returning stale vectors. Switching embedding models requires re-uploading files
+to rebuild their vectors. The default SQLite backend remains keyword search and
+may miss passages when a question uses different words from the document.
 
 The default retrieval benchmark is in `tests/test_retrieval_eval.py`. It checks
 recall@3 against a small policy and IT corpus; it is a regression check, not a

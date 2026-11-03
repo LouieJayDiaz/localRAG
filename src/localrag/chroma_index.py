@@ -23,6 +23,7 @@ class ChromaIndex:
         self.database_path = database_path.expanduser()
         self.database_path.mkdir(parents=True, exist_ok=True)
         client = chromadb.PersistentClient(path=str(self.database_path))
+        self.client = client
         self.collection = client.get_or_create_collection(
             name="localrag_documents",
             embedding_function=NomicOllamaEmbeddings(),
@@ -32,7 +33,9 @@ class ChromaIndex:
         return self
 
     def __exit__(self, *_: object) -> None:
-        return None
+        close = getattr(self.client, "close", None)
+        if callable(close):
+            close()
 
     def list_documents(self) -> list[Path]:
         data = self.collection.get(include=["metadatas"])

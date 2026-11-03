@@ -24,8 +24,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from .chat import LocalChat, ModelError
-from .chroma_index import ChromaIndex
 from .embeddings import EmbeddingError
+from .hybrid_index import HybridIndex
 from .ingestion import Document, IngestionError, SUPPORTED_SUFFIXES, read_document
 from .ollama import OllamaClient, OllamaError
 from .paths import default_data_directory as _default_data_directory
@@ -148,9 +148,9 @@ class LocalRAGServer:
             temporary.unlink(missing_ok=True)
             _LOGGER.exception("Could not persist indexing job status %s", job_id)
 
-    def _open_index(self) -> LocalIndex | ChromaIndex:
+    def _open_index(self) -> LocalIndex | HybridIndex:
         if os.environ.get("LOCALRAG_VECTOR_BACKEND", "sqlite").casefold() == "chroma":
-            return ChromaIndex(self.chroma_path)
+            return HybridIndex(self.index_path, self.chroma_path)
         return LocalIndex(self.index_path)
 
     def state(self) -> dict[str, object]:
@@ -513,7 +513,8 @@ class LocalRAGServer:
 
     def health(self) -> dict[str, object]:
         """Return local configuration diagnostics without document contents."""
-        backend = os.environ.get("LOCALRAG_VECTOR_BACKEND", "sqlite").casefold()
+        configured_backend = os.environ.get("LOCALRAG_VECTOR_BACKEND", "sqlite").casefold()
+        backend = "hybrid" if configured_backend == "chroma" else "sqlite"
         embedding_model = os.environ.get(
             "LOCALRAG_EMBEDDING_MODEL", "nomic-embed-text"
         )
@@ -529,7 +530,7 @@ class LocalRAGServer:
             None,
         )
         embedding_ready = None
-        if backend == "chroma":
+        if backend == "hybrid":
             embedding_ready = bool(
                 ollama
                 and ollama["available"]
@@ -549,7 +550,7 @@ class LocalRAGServer:
             "index_error": index_error,
             "disk_free_bytes": free_bytes,
             "embedding_ready": embedding_ready,
-            "embedding_model": embedding_model if backend == "chroma" else None,
+            "embedding_model": embedding_model if backend == "hybrid" else None,
             "providers": providers,
         }
 

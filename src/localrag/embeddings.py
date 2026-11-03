@@ -26,6 +26,33 @@ class NomicOllamaEmbeddings:
             "LOCALRAG_EMBEDDING_MODEL", "nomic-embed-text"
         )
 
+    @staticmethod
+    def name() -> str:
+        """Identify this embedding function in Chroma collection metadata."""
+        return "localrag_ollama"
+
+    def get_config(self) -> dict[str, str]:
+        """Return the serializable configuration required by Chroma."""
+        return {"endpoint": self.endpoint, "model": self.model}
+
+    @staticmethod
+    def build_from_config(config: dict[str, str]) -> "NomicOllamaEmbeddings":
+        """Recreate the embedding function saved with a Chroma collection."""
+        return NomicOllamaEmbeddings(
+            endpoint=config["endpoint"], model=config["model"]
+        )
+
+    def is_legacy(self) -> bool:
+        """Use Chroma's registered-function configuration format."""
+        return False
+
+    def default_space(self) -> str:
+        """Use cosine distance for normalized local embedding vectors."""
+        return "cosine"
+
+    def supported_spaces(self) -> list[str]:
+        return ["cosine", "l2", "ip"]
+
     def __call__(self, input: list[str]) -> list[list[float]]:
         if not input:
             return []
@@ -70,3 +97,7 @@ class NomicOllamaEmbeddings:
         ):
             raise EmbeddingError("The embedding provider returned invalid vector values.")
         return [[float(value) for value in vector] for vector in embeddings]
+
+    def embed_query(self, input: list[str]) -> list[list[float]]:
+        """Embed query texts using the same representation as indexed chunks."""
+        return self(input)
