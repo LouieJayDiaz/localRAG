@@ -39,6 +39,17 @@ def test_read_document_rejects_empty_content(tmp_path: Path) -> None:
         read_document(source)
 
 
+def test_read_document_rejects_extracted_content_over_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "long.md"
+    source.write_text("012345", encoding="utf-8")
+    monkeypatch.setattr("localrag.ingestion.MAX_DOCUMENT_CHARACTERS", 5)
+
+    with pytest.raises(IngestionError, match="too large after extraction"):
+        read_document(source)
+
+
 def test_ingest_directory_recurses_in_path_order(tmp_path: Path) -> None:
     (tmp_path / "nested").mkdir()
     (tmp_path / "z.txt").write_text("z", encoding="utf-8")

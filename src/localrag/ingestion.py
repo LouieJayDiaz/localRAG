@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SUPPORTED_SUFFIXES = frozenset({".docx", ".md", ".pdf", ".txt"})
+MAX_DOCUMENT_CHARACTERS = 5_000_000
 
 
 class IngestionError(ValueError):
@@ -83,6 +84,11 @@ def read_document(path: Path) -> Document:
 
     if not content.strip():
         raise IngestionError(f"Document is empty: {path}")
+    if len(content) > MAX_DOCUMENT_CHARACTERS:
+        raise IngestionError(
+            f"Document is too large after extraction: {path} exceeds "
+            f"{MAX_DOCUMENT_CHARACTERS:,} characters."
+        )
 
     return Document(path=path.resolve(), content=content)
 
