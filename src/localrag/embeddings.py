@@ -28,8 +28,13 @@ class NomicOllamaEmbeddings:
 
     @staticmethod
     def name() -> str:
-        """Identify this embedding function in Chroma collection metadata."""
-        return "localrag_ollama"
+        """Keep compatibility with collections made by older Chroma clients.
+
+        Older LocalRAG versions created this collection with Chroma's default
+        embedding-function identity. Chroma allows an explicitly supplied
+        function named ``default`` to open that collection without a conflict.
+        """
+        return "default"
 
     def get_config(self) -> dict[str, str]:
         """Return the serializable configuration required by Chroma."""

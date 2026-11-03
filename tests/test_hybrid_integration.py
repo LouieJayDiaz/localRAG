@@ -67,3 +67,33 @@ def test_chroma_hybrid_index_keeps_lexical_service_when_ollama_is_offline(
         results = index.search("vacation days", limit=3)
 
     assert [result.document_path for result in results] == [source]
+
+
+def test_chroma_opens_legacy_default_embedding_collection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chromadb = pytest.importorskip("chromadb")
+    database = tmp_path / "chroma"
+    client = chromadb.PersistentClient(path=str(database))
+    collection = client.get_or_create_collection(name="localrag_documents")
+    collection.upsert(
+        ids=["legacy"],
+        embeddings=[[1.0, 0.0, 0.0]],
+        documents=["Annual leave gives fifteen paid days."],
+        metadatas=[{"document_path": str(tmp_path / "old.md"), "chunk_index": 0}],
+    )
+    client.close()
+    monkeypatch.setattr(
+        "localrag.embeddings.urlopen",
+        lambda request, **_kwargs: EmbeddingResponse({
+            "embeddings": [
+                [1.0, 0.0, 0.0]
+                for _ in json.loads(request.data)["input"]
+            ]
+        }),
+    )
+
+    with HybridIndex(tmp_path / "index.sqlite3", database) as index:
+        results = index.search("vacation policy", limit=3)
+
+    assert [result.document_path for result in results] == [tmp_path / "old.md"]
